@@ -58,7 +58,8 @@ export default function Chat() {
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
     });
     await updateDoc(doc(db, "rooms", activeRoom.id), {
-      lastMessage: text.trim(), lastMessageTime: new Date().toISOString(), lastMessageUser: profile?.name || "—",
+      lastMessage: text.trim(), lastMessageTime: new Date().toISOString(),
+      lastMessageUser: profile?.name || "—",
     });
     setText("");
   };
@@ -77,24 +78,45 @@ export default function Chat() {
     setSelectedMembers([]); setMemberSearch(""); setShowNewRoom(false);
   };
 
-  const toggleMember = (uid) => setSelectedMembers(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
+  const toggleMember = (uid) => setSelectedMembers(prev =>
+    prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+  );
 
   const filteredRooms = rooms.filter(r => r.name?.toLowerCase().includes(search.toLowerCase()));
   const filteredUsers = users.filter(u => u.uid !== user.uid &&
-    (u.name?.toLowerCase().includes(memberSearch.toLowerCase()) || u.email?.toLowerCase().includes(memberSearch.toLowerCase())));
+    (u.name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      u.email?.toLowerCase().includes(memberSearch.toLowerCase()))
+  );
 
+  // Group consecutive messages from same user within 2 min
   const groupedMessages = messages.reduce((groups, msg, i) => {
     const prev = messages[i - 1];
-    const isSame = prev && prev.userId === msg.userId && msg.createdAt && prev.createdAt && (msg.createdAt?.seconds - prev.createdAt?.seconds) < 120;
-    if (!isSame) groups.push({ userId: msg.userId, userName: msg.userName, userRole: msg.userRole, msgs: [msg] });
-    else groups[groups.length - 1].msgs.push(msg);
+    const isSame = prev &&
+      prev.userId === msg.userId &&
+      msg.createdAt && prev.createdAt &&
+      (msg.createdAt?.seconds - prev.createdAt?.seconds) < 120;
+    if (!isSame) {
+      groups.push({ userId: msg.userId, userName: msg.userName, userRole: msg.userRole, msgs: [msg] });
+    } else {
+      groups[groups.length - 1].msgs.push(msg);
+    }
     return groups;
   }, []);
 
-  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit" };
+  const inputStyle = {
+    background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`,
+    borderRadius: "10px", padding: "10px 14px", fontSize: "14px",
+    outline: "none", fontFamily: "inherit",
+  };
+
+  // Fixed bubble radius — same for all messages
+  const bubbleRadius = "16px";
+  const bubbleRadiusMe = "16px 4px 16px 16px";
+  const bubbleRadiusThem = "4px 16px 16px 16px";
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 120px)", borderRadius: "16px", overflow: "hidden", border: `1px solid ${t.border}` }}>
+
       {/* Sidebar */}
       <div style={{ width: "260px", background: t.sidebar, borderRight: `1px solid ${t.border}`, display: "flex", flexDirection: "column", flexShrink: 0 }}>
         <div style={{ padding: "16px", borderBottom: `1px solid ${t.border}` }}>
@@ -107,13 +129,16 @@ export default function Chat() {
           </div>
           <div style={{ position: "relative" }}>
             <Search size={14} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: t.textMuted }} />
-            <input placeholder="Поиск чатов..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...inputStyle, paddingLeft: "32px", width: "100%", fontSize: "13px" }} />
+            <input placeholder="Поиск чатов..." value={search} onChange={e => setSearch(e.target.value)}
+              style={{ ...inputStyle, paddingLeft: "32px", width: "100%", fontSize: "13px" }} />
           </div>
         </div>
 
         <div style={{ flex: 1, overflowY: "auto", padding: "8px" }}>
           {filteredRooms.length === 0 ? (
-            <div style={{ color: t.textFaint, fontSize: "13px", textAlign: "center", padding: "30px 16px" }}>Нет чатов.<br />Нажми + чтобы создать!</div>
+            <div style={{ color: t.textFaint, fontSize: "13px", textAlign: "center", padding: "30px 16px" }}>
+              Нет чатов.<br />Нажми + чтобы создать!
+            </div>
           ) : filteredRooms.map(room => (
             <motion.button key={room.id} onClick={() => setActiveRoom(room)} whileHover={{ x: 2 }}
               style={{ width: "100%", background: activeRoom?.id === room.id ? "rgba(124,58,237,0.15)" : "transparent", border: "none", borderRadius: "10px", padding: "10px 12px", cursor: "pointer", textAlign: "left", marginBottom: "2px" }}>
@@ -133,13 +158,15 @@ export default function Chat() {
         </div>
 
         <div style={{ padding: "12px", borderTop: `1px solid ${t.border}` }}>
-          <div style={{ color: t.textFaint, fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>Команда ({users.length})</div>
+          <div style={{ color: t.textFaint, fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
+            Команда ({users.length})
+          </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {users.slice(0, 5).map(u => (
               <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <div style={{ position: "relative" }}>
                   <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: `linear-gradient(135deg, ${ROLE_COLORS[u.role]}, ${ROLE_COLORS[u.role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#fff" }}>
-                    {(u.name || "?")[0].toUpperCase()}
+                    {u.avatarEmoji || (u.name || "?")[0].toUpperCase()}
                   </div>
                   <div style={{ position: "absolute", bottom: -1, right: -1, width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", border: `1.5px solid ${t.bg}` }} />
                 </div>
@@ -153,6 +180,7 @@ export default function Chat() {
       {/* Chat area */}
       {activeRoom ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: t.bg }}>
+          {/* Room header */}
           <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: "12px", background: t.topbar }}>
             <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {activeRoom.type === "private" ? <Lock size={16} style={{ color: "#f59e0b" }} /> : <Hash size={16} style={{ color: "#7c3aed" }} />}
@@ -160,12 +188,15 @@ export default function Chat() {
             <div>
               <div style={{ color: t.text, fontWeight: 600, fontSize: "15px" }}>{activeRoom.name}</div>
               <div style={{ color: t.textMuted, fontSize: "12px" }}>
-                {activeRoom.type === "private" ? `${activeRoom.members?.length || 0} участников · приватный` : activeRoom.description || "публичный канал"}
+                {activeRoom.type === "private"
+                  ? `${activeRoom.members?.length || 0} участников · приватный`
+                  : activeRoom.description || "публичный канал"}
               </div>
             </div>
           </div>
 
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          {/* Messages */}
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
             {groupedMessages.length === 0 ? (
               <div style={{ textAlign: "center", color: t.textFaint, padding: "60px 20px" }}>
                 <div style={{ fontSize: "32px", marginBottom: "12px" }}>💬</div>
@@ -175,39 +206,52 @@ export default function Chat() {
               const isMe = group.userId === user.uid;
               const roleColor = ROLE_COLORS[group.userRole] || "#64748b";
               return (
-                <motion.div key={gi} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  style={{ display: "flex", gap: "10px", flexDirection: isMe ? "row-reverse" : "row" }}>
+                <div key={gi} style={{ display: "flex", gap: "10px", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end" }}>
+                  {/* Avatar — only for others */}
                   {!isMe && (
-                    <div style={{ width: "34px", height: "34px", borderRadius: "10px", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0, alignSelf: "flex-end" }}>
-                      {(group.userName || "?")[0].toUpperCase()}
+                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                      {group.userName?.[0]?.toUpperCase() || "?"}
                     </div>
                   )}
-                  <div style={{ maxWidth: "65%", display: "flex", flexDirection: "column", gap: "3px", alignItems: isMe ? "flex-end" : "flex-start" }}>
+
+                  <div style={{ maxWidth: "60%", display: "flex", flexDirection: "column", gap: "2px", alignItems: isMe ? "flex-end" : "flex-start" }}>
+                    {/* Name + role */}
                     {!isMe && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
                         <span style={{ color: roleColor, fontSize: "12px", fontWeight: 700 }}>{group.userName}</span>
-                        <span style={{ color: t.textFaint, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[group.userRole]}</span>
+                        <span style={{ color: t.textFaint, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[group.userRole] || group.userRole}</span>
                       </div>
                     )}
-                    {group.msgs.map((msg, mi) => (
+
+                    {/* Bubbles — consistent radius */}
+                    {group.msgs.map((msg) => (
                       <div key={msg.id} style={{
                         background: isMe ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : t.bgCard,
-                        color: isMe ? "#fff" : t.text, padding: "10px 14px",
-                        borderRadius: isMe ? mi === 0 ? "16px 16px 4px 16px" : "4px 16px 16px 4px" : mi === 0 ? "16px 16px 16px 4px" : "4px 4px 16px 16px",
-                        fontSize: "14px", lineHeight: "1.5", wordBreak: "break-word",
-                        border: isMe ? "none" : `1px solid ${t.border}`
+                        color: isMe ? "#fff" : t.text,
+                        padding: "10px 14px",
+                        borderRadius: isMe ? bubbleRadiusMe : bubbleRadiusThem,
+                        fontSize: "14px",
+                        lineHeight: "1.5",
+                        wordBreak: "break-word",
+                        border: isMe ? "none" : `1px solid ${t.border}`,
+                        maxWidth: "100%",
                       }}>
                         {msg.text}
                       </div>
                     ))}
-                    <div style={{ color: t.textFaint, fontSize: "11px" }}>{group.msgs[group.msgs.length - 1].time}</div>
+
+                    {/* Time */}
+                    <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "2px" }}>
+                      {group.msgs[group.msgs.length - 1].time}
+                    </div>
                   </div>
-                </motion.div>
+                </div>
               );
             })}
             <div ref={messagesEndRef} />
           </div>
 
+          {/* Input */}
           <div style={{ padding: "16px 20px", borderTop: `1px solid ${t.border}`, background: t.topbar }}>
             <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
               <div style={{ flex: 1, position: "relative" }}>
@@ -217,7 +261,7 @@ export default function Chat() {
                   style={{ ...inputStyle, width: "100%", paddingRight: "130px", minHeight: "44px", maxHeight: "120px", resize: "none" }} />
                 <div style={{ position: "absolute", right: "10px", bottom: "10px", display: "flex", gap: "4px" }}>
                   {EMOJI.slice(0, 5).map(e => (
-                    <button key={e} onClick={() => setText(t => t + e)}
+                    <button key={e} onClick={() => setText(prev => prev + e)}
                       style={{ background: "none", border: "none", cursor: "pointer", fontSize: "14px", padding: "1px", opacity: 0.5 }}
                       onMouseEnter={ev => ev.target.style.opacity = 1}
                       onMouseLeave={ev => ev.target.style.opacity = 0.5}>{e}</button>
@@ -254,6 +298,7 @@ export default function Chat() {
                   style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {/* Type */}
                 <div style={{ display: "flex", gap: "8px" }}>
                   {[{ val: "public", label: "Публичный", icon: Hash, desc: "Все видят" }, { val: "private", label: "Приватный", icon: Lock, desc: "Только участники" }].map(({ val, label, icon: Icon, desc }) => (
                     <button key={val} onClick={() => setNewRoom({ ...newRoom, type: val })}
@@ -272,6 +317,7 @@ export default function Chat() {
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Описание (необязательно)</label>
                   <input placeholder="О чём этот чат?" value={newRoom.description} onChange={e => setNewRoom({ ...newRoom, description: e.target.value })} style={{ ...inputStyle, width: "100%" }} />
                 </div>
+                {/* Members */}
                 <div>
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "8px" }}>
                     Добавить участников {selectedMembers.length > 0 && <span style={{ color: "#7c3aed" }}>({selectedMembers.length} выбрано)</span>}
@@ -292,11 +338,11 @@ export default function Chat() {
                         <button key={u.id} onClick={() => toggleMember(u.uid)}
                           style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 12px", borderRadius: "10px", border: `1px solid ${isSelected ? "#7c3aed" : t.border}`, background: isSelected ? "rgba(124,58,237,0.1)" : t.bgCard, cursor: "pointer", textAlign: "left" }}>
                           <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                            {(u.name || "?")[0].toUpperCase()}
+                            {u.avatarEmoji || (u.name || "?")[0].toUpperCase()}
                           </div>
                           <div style={{ flex: 1 }}>
                             <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{u.name}</div>
-                            <div style={{ color: roleColor, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[u.role]}</div>
+                            <div style={{ color: roleColor, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[u.role] || u.role}</div>
                           </div>
                           <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${isSelected ? "#7c3aed" : t.border}`, background: isSelected ? "#7c3aed" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                             {isSelected && <Check size={12} style={{ color: "#fff" }} />}

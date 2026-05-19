@@ -13,6 +13,7 @@ import Team from "./pages/Team";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
+import Models from "./pages/Models";
 
 function ProfileWrapper() {
   const { userId } = useParams();
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Layout><Profile /></Layout></PrivateRoute>} />
       <Route path="/profile/:userId" element={<PrivateRoute><Layout><ProfileWrapper /></Layout></PrivateRoute>} />
+      <Route path="/models" element={<PrivateRoute><Layout><Models /></Layout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

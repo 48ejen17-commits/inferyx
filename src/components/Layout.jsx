@@ -18,6 +18,7 @@ const NAV = [
   { to: "/schedule", icon: CalendarDays, label: "График" },
   { to: "/content", icon: FileText, label: "Контент" },
   { to: "/team", icon: Users, label: "Команда" },
+  { to: "/models", icon: UserCircle, label: "Модели" },
   { to: "/analytics", icon: BarChart3, label: "Аналитика" },
   { to: "/settings", icon: Settings, label: "Настройки" },
 ];

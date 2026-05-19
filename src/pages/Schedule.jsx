@@ -10,8 +10,10 @@ const SHIFT_COLORS = ["#7c3aed", "#0ea5e9", "#10b981", "#f59e0b", "#db2777", "#e
 
 export default function Schedule() {
   const { db, user, profile } = useAuth();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const t = theme;
+  const isDark = mode === "dark";
+
   const [shifts, setShifts] = useState([]);
   const [users, setUsers] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -65,8 +67,16 @@ export default function Schedule() {
   const weekShifts = shifts.filter(s => s.weekOffset === weekOffset);
   const uniqueWorkers = [...new Set(weekShifts.map(s => s.userId))].length;
 
-  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", width: "100%" };
-  const selectStyle = { ...inputStyle };
+  const inputStyle = {
+    background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`,
+    borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none",
+    fontFamily: "inherit", width: "100%"
+  };
+
+  const selectStyle = {
+    ...inputStyle,
+    colorScheme: isDark ? "dark" : "light",
+  };
 
   return (
     <div>
@@ -162,7 +172,7 @@ export default function Schedule() {
                     </div>
                     <div>
                       <div style={{ color: t.text, fontSize: "14px", fontWeight: 600 }}>{u.userName}</div>
-                      <div style={{ color: roleColor, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[u.userRole]}</div>
+                      <div style={{ color: roleColor, fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[u.userRole] || u.userRole}</div>
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "8px" }}>
@@ -196,7 +206,9 @@ export default function Schedule() {
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Сотрудник</label>
                   <select value={form.userId} onChange={e => setForm({ ...form, userId: e.target.value })} style={selectStyle}>
                     <option value="">Выбери сотрудника...</option>
-                    {users.map(u => <option key={u.id} value={u.id}>{u.name} — {ROLE_LABELS[u.role]}</option>)}
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.name} — {ROLE_LABELS[u.role] || u.role}</option>
+                    ))}
                   </select>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
@@ -228,7 +240,7 @@ export default function Schedule() {
                   <div style={{ display: "flex", gap: "8px" }}>
                     {SHIFT_COLORS.map(c => (
                       <button key={c} onClick={() => setForm({ ...form, color: c })}
-                        style={{ width: "28px", height: "28px", borderRadius: "50%", background: c, border: form.color === c ? "3px solid " + (t === "light" ? "#000" : "#fff") : "3px solid transparent", cursor: "pointer" }} />
+                        style={{ width: "28px", height: "28px", borderRadius: "50%", background: c, border: form.color === c ? `3px solid ${isDark ? "#fff" : "#000"}` : "3px solid transparent", cursor: "pointer" }} />
                     ))}
                   </div>
                 </div>

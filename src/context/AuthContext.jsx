@@ -6,7 +6,7 @@ import {
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, collection, onSnapshot } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyB3TeUaqDGu_4hhu8Mmr348W-SFWhq6bsU",
@@ -31,7 +31,16 @@ export const ROLES = {
   CHATTER: "chatter",
 };
 
+// Owner намеренно убран — нельзя назначить через интерфейс
 export const ROLE_LABELS = {
+  admin: "Admin",
+  project_manager: "Project Manager",
+  team_lead: "Team Lead",
+  chatter: "Chatter",
+};
+
+// Для отображения — включает owner (только для показа, не для выбора)
+export const ROLE_LABELS_DISPLAY = {
   owner: "Owner",
   admin: "Admin",
   project_manager: "Project Manager",
@@ -56,10 +65,15 @@ export function AuthProvider({ children }) {
     const unsub = onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        const snap = await getDoc(doc(db, "users", u.uid));
-        if (snap.exists()) {
-          setProfile(snap.data());
-        }
+        // Find profile by uid
+        const snap = await new Promise(resolve => {
+          const unsub = onSnapshot(collection(db, "users"), snap => {
+            unsub();
+            resolve(snap);
+          });
+        });
+        const found = snap.docs.find(d => d.data().uid === u.uid || d.id === u.uid);
+        if (found) setProfile(found.data());
       } else {
         setUser(null);
         setProfile(null);
