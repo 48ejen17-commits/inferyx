@@ -4,7 +4,7 @@ import { collection, onSnapshot, addDoc, updateDoc, doc } from "firebase/firesto
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { useAuth, ROLES, ROLE_LABELS, ROLE_COLORS } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { Plus, X, Users, Shield, TrendingUp, Activity } from "lucide-react";
+import { Plus, X, Users, Shield, TrendingUp, Activity, Lock } from "lucide-react";
 
 export default function Team() {
   const { db, profile } = useAuth();
@@ -19,8 +19,11 @@ export default function Team() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
 
+  // ТОЛЬКО owner может добавлять пользователей
   const isOwner = profile?.role === ROLES.OWNER;
-  const isAdmin = profile?.role === ROLES.ADMIN || isOwner;
+
+  // Роли доступные при создании — owner нельзя назначить через интерфейс
+  const ASSIGNABLE_ROLES = Object.entries(ROLE_LABELS).filter(([val]) => val !== ROLES.OWNER);
 
   useEffect(() => {
     const unsubs = [
@@ -46,7 +49,8 @@ export default function Team() {
   };
 
   const changeRole = async (userId, newRole) => {
-    if (!isOwner) return;
+    // Только owner может менять роли, и нельзя назначить owner через интерфейс
+    if (!isOwner || newRole === ROLES.OWNER) return;
     await updateDoc(doc(db, "users", userId), { role: newRole });
   };
 
@@ -59,7 +63,7 @@ export default function Team() {
   const roleOrder = [ROLES.OWNER, ROLES.ADMIN, ROLES.PROJECT_MANAGER, ROLES.TEAM_LEAD, ROLES.CHATTER];
   const grouped = roleOrder.map(role => ({ role, members: users.filter(u => u.role === role) })).filter(g => g.members.length > 0);
 
-  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", width: "100%", transition: "border-color 0.2s" };
+  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", width: "100%" };
   const selectStyle = { ...inputStyle };
 
   return (
@@ -69,17 +73,21 @@ export default function Team() {
           <h1 style={{ fontSize: "24px", fontWeight: 700, color: t.text, marginBottom: "4px" }}>Команда</h1>
           <p style={{ color: t.textMuted, fontSize: "14px" }}>{users.length} участников</p>
         </div>
-        {isAdmin && (
+        {isOwner ? (
           <button onClick={() => setShowForm(true)}
             style={{ display: "flex", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
             <Plus size={16} />Добавить участника
           </button>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", background: t.bgCard, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "10px", padding: "10px 20px", fontSize: "14px" }}>
+            <Lock size={14} />Только Owner может добавлять
+          </div>
         )}
       </div>
 
       {/* Add member modal */}
       <AnimatePresence>
-        {showForm && (
+        {showForm && isOwner && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
@@ -95,8 +103,11 @@ export default function Team() {
                 <div>
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Роль</label>
                   <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} style={selectStyle}>
-                    {Object.entries(ROLE_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                    {ASSIGNABLE_ROLES.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                   </select>
+                  <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "6px" }}>
+                    * Роль Owner назначается только через Firebase
+                  </div>
                 </div>
                 {error && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "8px", padding: "10px 14px", color: "#f87171", fontSize: "13px" }}>{error}</div>}
                 <button onClick={createMember} disabled={creating}
@@ -118,12 +129,11 @@ export default function Team() {
               style={{ background: t.bgSecondary, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "28px", width: "100%", maxWidth: "480px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                  <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: `linear-gradient(135deg, ${ROLE_COLORS[selected.role]}, ${ROLE_COLORS[selected.role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px", fontWeight: 700, color: "#fff" }}>
-                    {(selected.name || "?")[0].toUpperCase()}
+                  <div style={{ width: "52px", height: "52px", borderRadius: "14px", background: `linear-gradient(135deg, ${ROLE_COLORS[selected.role]}, ${ROLE_COLORS[selected.role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: selected.avatarEmoji ? "24px" : "20px", fontWeight: 700, color: "#fff" }}>
+                    {selected.avatarEmoji || (selected.name || "?")[0].toUpperCase()}
                   </div>
                   <div>
                     <div style={{ color: t.text, fontSize: "18px", fontWeight: 700 }}>{selected.name}</div>
-                    <div style={{ color: t.textMuted, fontSize: "13px" }}>{selected.email}</div>
                     <div style={{ display: "inline-block", marginTop: "4px", fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "20px", background: `${ROLE_COLORS[selected.role]}20`, color: ROLE_COLORS[selected.role], textTransform: "uppercase", letterSpacing: "0.5px" }}>
                       {ROLE_LABELS[selected.role]}
                     </div>
@@ -151,7 +161,7 @@ export default function Team() {
                 );
               })()}
 
-              <div>
+              <div style={{ marginBottom: "20px" }}>
                 <div style={{ color: t.textMuted, fontSize: "13px", marginBottom: "12px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px" }}>Последние записи</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "200px", overflowY: "auto" }}>
                   {entries.filter(e => e.userId === (selected.uid || selected.id)).slice(0, 8).map(e => (
@@ -172,12 +182,21 @@ export default function Team() {
                 </div>
               </div>
 
-              {isOwner && (
-                <div style={{ marginTop: "20px", paddingTop: "20px", borderTop: `1px solid ${t.border}` }}>
+              {/* Change role — только owner, нельзя назначить owner */}
+              {isOwner && selected.role !== ROLES.OWNER && (
+                <div style={{ paddingTop: "20px", borderTop: `1px solid ${t.border}` }}>
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "8px" }}>Изменить роль</label>
                   <select value={selected.role} onChange={e => { changeRole(selected.id, e.target.value); setSelected({ ...selected, role: e.target.value }); }} style={selectStyle}>
-                    {Object.entries(ROLE_LABELS).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                    {ASSIGNABLE_ROLES.map(([val, label]) => <option key={val} value={val}>{label}</option>)}
                   </select>
+                  <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "6px" }}>* Роль Owner назначается только через Firebase</div>
+                </div>
+              )}
+
+              {selected.role === ROLES.OWNER && (
+                <div style={{ paddingTop: "20px", borderTop: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Lock size={14} style={{ color: t.textMuted }} />
+                  <span style={{ color: t.textMuted, fontSize: "13px" }}>Роль Owner нельзя изменить через интерфейс</span>
                 </div>
               )}
             </motion.div>
@@ -191,7 +210,7 @@ export default function Team() {
       ) : users.length === 0 ? (
         <div style={{ color: t.textMuted, textAlign: "center", padding: "60px" }}>
           <Users size={40} style={{ marginBottom: "12px", opacity: 0.3 }} />
-          <div>Нет участников. Добавь первого!</div>
+          <div>Нет участников</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -210,12 +229,12 @@ export default function Team() {
                       onClick={() => setSelected(member)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                       style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "14px", padding: "18px", cursor: "pointer" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
-                        <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: `linear-gradient(135deg, ${ROLE_COLORS[role]}, ${ROLE_COLORS[role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                          {(member.name || "?")[0].toUpperCase()}
+                        <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: `linear-gradient(135deg, ${ROLE_COLORS[role]}, ${ROLE_COLORS[role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: member.avatarEmoji ? "20px" : "16px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                          {member.avatarEmoji || (member.name || "?")[0].toUpperCase()}
                         </div>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ color: t.text, fontWeight: 600, fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
-                          <div style={{ color: t.textMuted, fontSize: "12px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.email}</div>
+                          {role === ROLES.OWNER && <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}><Lock size={10} style={{ color: ROLE_COLORS[role] }} /><span style={{ color: ROLE_COLORS[role], fontSize: "11px" }}>Owner</span></div>}
                         </div>
                       </div>
                       <div style={{ display: "flex", gap: "8px" }}>
