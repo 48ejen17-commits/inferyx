@@ -6,6 +6,7 @@ import { useTheme } from "../context/ThemeContext";
 import { Send, Plus, Hash, Lock, Users, X, Search, Check } from "lucide-react";
 
 const EMOJI = ["👍", "❤️", "😂", "🔥", "💯", "👏", "🎯", "✅"];
+const BUBBLE_RADIUS = "12px"; // одинаковое для всех
 
 export default function Chat() {
   const { db, user, profile } = useAuth();
@@ -88,11 +89,10 @@ export default function Chat() {
       u.email?.toLowerCase().includes(memberSearch.toLowerCase()))
   );
 
-  // Group consecutive messages from same user within 2 min
+  // Группируем сообщения по отправителю
   const groupedMessages = messages.reduce((groups, msg, i) => {
     const prev = messages[i - 1];
-    const isSame = prev &&
-      prev.userId === msg.userId &&
+    const isSame = prev && prev.userId === msg.userId &&
       msg.createdAt && prev.createdAt &&
       (msg.createdAt?.seconds - prev.createdAt?.seconds) < 120;
     if (!isSame) {
@@ -108,11 +108,6 @@ export default function Chat() {
     borderRadius: "10px", padding: "10px 14px", fontSize: "14px",
     outline: "none", fontFamily: "inherit",
   };
-
-  // Fixed bubble radius — same for all messages
-  const bubbleRadius = "16px";
-  const bubbleRadiusMe = "16px 4px 16px 16px";
-  const bubbleRadiusThem = "4px 16px 16px 16px";
 
   return (
     <div style={{ display: "flex", height: "calc(100vh - 120px)", borderRadius: "16px", overflow: "hidden", border: `1px solid ${t.border}` }}>
@@ -180,7 +175,6 @@ export default function Chat() {
       {/* Chat area */}
       {activeRoom ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: t.bg }}>
-          {/* Room header */}
           <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, display: "flex", alignItems: "center", gap: "12px", background: t.topbar }}>
             <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "rgba(124,58,237,0.2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
               {activeRoom.type === "private" ? <Lock size={16} style={{ color: "#f59e0b" }} /> : <Hash size={16} style={{ color: "#7c3aed" }} />}
@@ -188,60 +182,58 @@ export default function Chat() {
             <div>
               <div style={{ color: t.text, fontWeight: 600, fontSize: "15px" }}>{activeRoom.name}</div>
               <div style={{ color: t.textMuted, fontSize: "12px" }}>
-                {activeRoom.type === "private"
-                  ? `${activeRoom.members?.length || 0} участников · приватный`
-                  : activeRoom.description || "публичный канал"}
+                {activeRoom.type === "private" ? `${activeRoom.members?.length || 0} участников · приватный` : activeRoom.description || "публичный канал"}
               </div>
             </div>
           </div>
 
-          {/* Messages */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
             {groupedMessages.length === 0 ? (
               <div style={{ textAlign: "center", color: t.textFaint, padding: "60px 20px" }}>
                 <div style={{ fontSize: "32px", marginBottom: "12px" }}>💬</div>
-                <div style={{ fontSize: "15px", fontWeight: 600, color: t.textMuted, marginBottom: "6px" }}>Начни общение!</div>
+                <div style={{ fontSize: "15px", fontWeight: 600, color: t.textMuted }}>Начни общение!</div>
               </div>
             ) : groupedMessages.map((group, gi) => {
               const isMe = group.userId === user.uid;
               const roleColor = ROLE_COLORS[group.userRole] || "#64748b";
               return (
-                <div key={gi} style={{ display: "flex", gap: "10px", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-end" }}>
-                  {/* Avatar — only for others */}
+                <div key={gi} style={{ display: "flex", gap: "10px", flexDirection: isMe ? "row-reverse" : "row", alignItems: "flex-start" }}>
+                  {/* Аватар */}
                   {!isMe && (
-                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                    <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "13px", fontWeight: 700, color: "#fff", flexShrink: 0, marginTop: "20px" }}>
                       {group.userName?.[0]?.toUpperCase() || "?"}
                     </div>
                   )}
 
-                  <div style={{ maxWidth: "60%", display: "flex", flexDirection: "column", gap: "2px", alignItems: isMe ? "flex-end" : "flex-start" }}>
-                    {/* Name + role */}
+                  <div style={{ maxWidth: "60%", display: "flex", flexDirection: "column", gap: "4px", alignItems: isMe ? "flex-end" : "flex-start" }}>
+                    {/* Имя */}
                     {!isMe && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
                         <span style={{ color: roleColor, fontSize: "12px", fontWeight: 700 }}>{group.userName}</span>
                         <span style={{ color: t.textFaint, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[group.userRole] || group.userRole}</span>
                       </div>
                     )}
 
-                    {/* Bubbles — consistent radius */}
-                    {group.msgs.map((msg) => (
-                      <div key={msg.id} style={{
-                        background: isMe ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : t.bgCard,
-                        color: isMe ? "#fff" : t.text,
-                        padding: "10px 14px",
-                        borderRadius: isMe ? bubbleRadiusMe : bubbleRadiusThem,
-                        fontSize: "14px",
-                        lineHeight: "1.5",
-                        wordBreak: "break-word",
-                        border: isMe ? "none" : `1px solid ${t.border}`,
-                        maxWidth: "100%",
-                      }}>
-                        {msg.text}
-                      </div>
-                    ))}
+                    {/* Пузыри — одинаковое закругление у всех */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "3px", alignItems: isMe ? "flex-end" : "flex-start" }}>
+                      {group.msgs.map((msg) => (
+                        <div key={msg.id} style={{
+                          background: isMe ? "linear-gradient(135deg, #7c3aed, #6d28d9)" : t.bgCard,
+                          color: isMe ? "#fff" : t.text,
+                          padding: "10px 14px",
+                          borderRadius: BUBBLE_RADIUS,
+                          fontSize: "14px",
+                          lineHeight: "1.5",
+                          wordBreak: "break-word",
+                          border: isMe ? "none" : `1px solid ${t.border}`,
+                          maxWidth: "100%",
+                        }}>
+                          {msg.text}
+                        </div>
+                      ))}
+                    </div>
 
-                    {/* Time */}
-                    <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "2px" }}>
+                    <div style={{ color: t.textFaint, fontSize: "11px" }}>
                       {group.msgs[group.msgs.length - 1].time}
                     </div>
                   </div>
@@ -251,7 +243,6 @@ export default function Chat() {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div style={{ padding: "16px 20px", borderTop: `1px solid ${t.border}`, background: t.topbar }}>
             <div style={{ display: "flex", gap: "10px", alignItems: "flex-end" }}>
               <div style={{ flex: 1, position: "relative" }}>
@@ -298,7 +289,6 @@ export default function Chat() {
                   style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                {/* Type */}
                 <div style={{ display: "flex", gap: "8px" }}>
                   {[{ val: "public", label: "Публичный", icon: Hash, desc: "Все видят" }, { val: "private", label: "Приватный", icon: Lock, desc: "Только участники" }].map(({ val, label, icon: Icon, desc }) => (
                     <button key={val} onClick={() => setNewRoom({ ...newRoom, type: val })}
@@ -317,7 +307,6 @@ export default function Chat() {
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Описание (необязательно)</label>
                   <input placeholder="О чём этот чат?" value={newRoom.description} onChange={e => setNewRoom({ ...newRoom, description: e.target.value })} style={{ ...inputStyle, width: "100%" }} />
                 </div>
-                {/* Members */}
                 <div>
                   <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "8px" }}>
                     Добавить участников {selectedMembers.length > 0 && <span style={{ color: "#7c3aed" }}>({selectedMembers.length} выбрано)</span>}

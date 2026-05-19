@@ -9,11 +9,11 @@ import Checklist from "./pages/Checklist";
 import Chat from "./pages/Chat";
 import Schedule from "./pages/Schedule";
 import Content from "./pages/Content";
+import Models from "./pages/Models";
 import Team from "./pages/Team";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
-import Models from "./pages/Models";
 
 function ProfileWrapper() {
   const { userId } = useParams();
@@ -46,12 +46,12 @@ function AppRoutes() {
       <Route path="/chat" element={<PrivateRoute><Layout><Chat /></Layout></PrivateRoute>} />
       <Route path="/schedule" element={<PrivateRoute><Layout><Schedule /></Layout></PrivateRoute>} />
       <Route path="/content" element={<PrivateRoute><Layout><Content /></Layout></PrivateRoute>} />
+      <Route path="/models" element={<PrivateRoute><Layout><Models /></Layout></PrivateRoute>} />
       <Route path="/team" element={<PrivateRoute><Layout><Team /></Layout></PrivateRoute>} />
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Layout><Profile /></Layout></PrivateRoute>} />
       <Route path="/profile/:userId" element={<PrivateRoute><Layout><ProfileWrapper /></Layout></PrivateRoute>} />
-      <Route path="/models" element={<PrivateRoute><Layout><Models /></Layout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
