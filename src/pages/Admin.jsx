@@ -7,7 +7,8 @@ import {
   Shield, Activity, Users, TrendingUp, FileText, Calculator,
   Clock, Filter, ChevronDown, AlertTriangle, CheckCircle,
   MessageSquare, Star, DollarSign, Percent, Target, Zap,
-  Download, RefreshCw, Search, Eye, BarChart2, Award
+  Download, RefreshCw, Search, Eye, BarChart2, Award,
+  Edit3, Trash2, Plus, X
 } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ function StatCard({ icon: Icon, label, value, sub, color, t }) {
 const TABS = [
   { key: "overview",     label: "Обзор",          icon: BarChart2 },
   { key: "logs",         label: "Логи",            icon: Activity },
+  { key: "reddit",       label: "Reddit Stats",    icon: TrendingUp },
   { key: "calculator",   label: "Калькуляторы",    icon: Calculator },
   { key: "kpi",          label: "KPI команды",     icon: Target },
 ];
@@ -242,6 +244,10 @@ export default function Admin() {
       )}
 
       {/* ── CALCULATOR ───────────────────────────────────────────────────────── */}
+      {tab === "reddit" && (
+        <RedditStatsTab db={db} models={models} t={t} />
+      )}
+
       {tab === "calculator" && (
         <CalculatorTab users={users} entries={entries} t={t} />
       )}
@@ -715,6 +721,481 @@ function KpiTab({ users, entries, tasks, grid, t }) {
       <div style={{ marginTop: "14px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "12px", padding: "12px 16px" }}>
         <span style={{ color: "#a78bfa", fontSize: "12px" }}>📊 Скор = (записи × 3) + (посты Reddit × 2) + (задачи выполнены × 5) − (проблемы × 2)</span>
       </div>
+    </motion.div>
+  );
+}
+
+// ── REDDIT STATS TAB ──────────────────────────────────────────────────────────
+function RedditStatsTab({ db, models, t }) {
+  const [entries, setEntries] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
+  const [filterModel, setFilterModel] = useState("all");
+  const [filterPeriod, setFilterPeriod] = useState(30);
+  const [saving, setSaving] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const emptyForm = {
+    date: new Date().toISOString().split("T")[0],
+    modelId: "", modelName: "",
+    subreddit: "",
+    postTitle: "",
+    views: "", upvotes: "", upvoteRatio: "", comments: "", shares: "",
+    dms: "", newSubs: "", revenue: "",
+    note: "",
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, "reddit_stats"), orderBy("date", "desc")),
+      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, [db]);
+
+  const save = async () => {
+    if (!form.subreddit || !form.date) return;
+    setSaving(true);
+    try {
+      const data = {
+        ...form,
+        views:       parseInt(form.views)       || 0,
+        upvotes:     parseInt(form.upvotes)      || 0,
+        upvoteRatio: parseFloat(form.upvoteRatio)|| 0,
+        comments:    parseInt(form.comments)     || 0,
+        shares:      parseInt(form.shares)       || 0,
+        dms:         parseInt(form.dms)          || 0,
+        newSubs:     parseInt(form.newSubs)      || 0,
+        revenue:     parseFloat(form.revenue)    || 0,
+        updatedAt: new Date().toISOString(),
+      };
+      if (editEntry) {
+        const { id, ...rest } = data;
+        await import("firebase/firestore").then(m =>
+          m.updateDoc(m.doc(db, "reddit_stats", editEntry.id), rest)
+        );
+      } else {
+        await addDoc(collection(db, "reddit_stats"), { ...data, createdAt: new Date().toISOString() });
+      }
+      setForm(emptyForm);
+      setShowForm(false);
+      setEditEntry(null);
+    } catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    await import("firebase/firestore").then(m =>
+      m.deleteDoc(m.doc(db, "reddit_stats", id))
+    );
+    setConfirmDel(null);
+  };
+
+  const startEdit = (e) => {
+    setForm({ ...e, date: e.date || "" });
+    setEditEntry(e);
+    setShowForm(true);
+  };
+
+  // Filter
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - filterPeriod);
+  const filtered = entries.filter(e => {
+    if (filterModel !== "all" && e.modelId !== filterModel && e.modelName !== filterModel) return false;
+    if (e.date && new Date(e.date) < cutoff) return false;
+    return true;
+  });
+
+  // Aggregate
+  const total = (key) => filtered.reduce((s, e) => s + (e[key] || 0), 0);
+  const avg   = (key) => filtered.length ? (total(key) / filtered.length).toFixed(1) : 0;
+  const bestPost = [...filtered].sort((a, b) => (b.views || 0) - (a.views || 0))[0];
+
+  // By subreddit
+  const bySubreddit = Object.entries(
+    filtered.reduce((acc, e) => {
+      const k = e.subreddit || "—";
+      if (!acc[k]) acc[k] = { views: 0, upvotes: 0, dms: 0, revenue: 0, count: 0 };
+      acc[k].views   += e.views   || 0;
+      acc[k].upvotes += e.upvotes || 0;
+      acc[k].dms     += e.dms     || 0;
+      acc[k].revenue += e.revenue || 0;
+      acc[k].count++;
+      return acc;
+    }, {})
+  ).sort((a, b) => b[1].views - a[1].views);
+
+  // By model
+  const byModel = Object.entries(
+    filtered.reduce((acc, e) => {
+      const k = e.modelName || "—";
+      if (!acc[k]) acc[k] = { views: 0, dms: 0, revenue: 0, count: 0 };
+      acc[k].views   += e.views   || 0;
+      acc[k].dms     += e.dms     || 0;
+      acc[k].revenue += e.revenue || 0;
+      acc[k].count++;
+      return acc;
+    }, {})
+  ).sort((a, b) => b[1].views - a[1].views);
+
+  // By date (last 14 days)
+  const last14 = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (13 - i));
+    return d.toISOString().split("T")[0];
+  });
+  const byDate = last14.map(date => ({
+    date,
+    label: new Date(date).toLocaleDateString("ru-RU", { day: "numeric", month: "short" }),
+    views: filtered.filter(e => e.date === date).reduce((s, e) => s + (e.views || 0), 0),
+    dms:   filtered.filter(e => e.date === date).reduce((s, e) => s + (e.dms   || 0), 0),
+  }));
+  const maxViews = Math.max(...byDate.map(d => d.views), 1);
+
+  const inputS = { background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "9px 12px", fontSize: "13px", outline: "none", fontFamily: "inherit", width: "100%" };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+
+      {/* Controls */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
+        <select value={filterModel} onChange={e => setFilterModel(e.target.value)}
+          style={{ ...inputS, width: "auto" }}>
+          <option value="all">Все модели</option>
+          {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+        <div style={{ display: "flex", gap: "6px" }}>
+          {[7, 14, 30, 90].map(d => (
+            <button key={d} onClick={() => setFilterPeriod(d)}
+              style={{ padding: "8px 14px", borderRadius: "8px", border: `1px solid ${filterPeriod === d ? "#7c3aed" : t.border}`, background: filterPeriod === d ? "rgba(124,58,237,0.15)" : t.bgCard, color: filterPeriod === d ? "#a78bfa" : t.textMuted, fontSize: "13px", fontWeight: filterPeriod === d ? 700 : 400, cursor: "pointer" }}>
+              {d}д
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => { setForm(emptyForm); setEditEntry(null); setShowForm(true); }}
+          style={{ display: "flex", alignItems: "center", gap: "7px", background: "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: 700, cursor: "pointer" }}>
+          <Plus size={15} />Добавить запись
+        </button>
+      </div>
+
+      {/* Summary cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px", marginBottom: "20px" }}>
+        {[
+          { icon: "👁",  label: "Просмотры",    value: fmt(total("views")),   color: "#0ea5e9" },
+          { icon: "⬆️",  label: "Upvotes",       value: fmt(total("upvotes")), color: "#7c3aed" },
+          { icon: "💬",  label: "Комментарии",   value: fmt(total("comments")),color: "#8b5cf6" },
+          { icon: "📩",  label: "DM конверсия",  value: fmt(total("dms")),     color: "#10b981" },
+          { icon: "🔔",  label: "Новых подписок",value: fmt(total("newSubs")), color: "#f59e0b" },
+          { icon: "💰",  label: "Выручка",       value: `$${fmt(total("revenue"))}`, color: "#db2877" },
+        ].map((s, i) => (
+          <div key={i} style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "14px", padding: "16px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ color: t.textMuted, fontSize: "11px", marginBottom: "5px" }}>{s.label}</div>
+                <div style={{ color: t.text, fontSize: "22px", fontWeight: 700 }}>{s.value}</div>
+                <div style={{ color: t.textFaint, fontSize: "10px", marginTop: "3px" }}>ср. {filtered.length > 0 ? (total(s.label === "Выручка" ? "revenue" : s.label === "Просмотры" ? "views" : s.label === "Upvotes" ? "upvotes" : s.label === "Комментарии" ? "comments" : s.label === "DM конверсия" ? "dms" : "newSubs") / filtered.length).toFixed(0) : 0} / пост</div>
+              </div>
+              <span style={{ fontSize: "20px" }}>{s.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+
+        {/* Chart by date */}
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px" }}>
+          <h3 style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "16px" }}>👁 Просмотры по дням</h3>
+          <div style={{ display: "flex", alignItems: "flex-end", gap: "4px", height: "100px" }}>
+            {byDate.map((d, i) => {
+              const h = maxViews > 0 ? Math.round((d.views / maxViews) * 100) : 0;
+              return (
+                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "3px" }}>
+                  <motion.div initial={{ height: 0 }} animate={{ height: `${h}%` }} transition={{ duration: 0.5, delay: i * 0.03 }}
+                    style={{ width: "100%", minHeight: d.views > 0 ? "4px" : "2px", background: d.views > 0 ? "linear-gradient(180deg, #7c3aed, #db2877)" : t.border, borderRadius: "3px 3px 0 0", cursor: "default" }}
+                    title={`${d.label}: ${fmt(d.views)} просмотров`} />
+                  {i % 3 === 0 && <div style={{ color: t.textFaint, fontSize: "9px", textAlign: "center", lineHeight: 1 }}>{new Date(d.date).getDate()}</div>}
+                </div>
+              );
+            })}
+          </div>
+          {filtered.length === 0 && <div style={{ color: t.textFaint, fontSize: "12px", textAlign: "center", marginTop: "8px" }}>Нет данных за период</div>}
+        </div>
+
+        {/* Top subreddits */}
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px" }}>
+          <h3 style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "14px" }}>🏆 Топ сабреддитов</h3>
+          {bySubreddit.length === 0 ? (
+            <div style={{ color: t.textFaint, fontSize: "12px", textAlign: "center", padding: "20px" }}>Нет данных</div>
+          ) : bySubreddit.slice(0, 5).map(([sub, data], i) => {
+            const maxV = bySubreddit[0]?.[1]?.views || 1;
+            const pct = Math.round((data.views / maxV) * 100);
+            return (
+              <div key={sub} style={{ marginBottom: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                  <span style={{ color: "#ff4500", fontSize: "12px", fontWeight: 600 }}>r/{sub}</span>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <span style={{ color: t.textMuted, fontSize: "11px" }}>👁 {fmt(data.views)}</span>
+                    <span style={{ color: "#10b981", fontSize: "11px" }}>📩 {data.dms}</span>
+                    <span style={{ color: "#db2877", fontSize: "11px" }}>${data.revenue.toFixed(0)}</span>
+                  </div>
+                </div>
+                <div style={{ height: "5px", background: t.border, borderRadius: "3px", overflow: "hidden" }}>
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, delay: i * 0.08 }}
+                    style={{ height: "100%", background: "linear-gradient(90deg, #ff4500, #ff6534)", borderRadius: "3px" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+
+        {/* By model */}
+        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px" }}>
+          <h3 style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "14px" }}>👤 По моделям</h3>
+          {byModel.length === 0 ? (
+            <div style={{ color: t.textFaint, fontSize: "12px", textAlign: "center", padding: "20px" }}>Нет данных</div>
+          ) : byModel.map(([name, data], i) => {
+            const model = models.find(m => m.name === name);
+            const color = model?.color || "#7c3aed";
+            const maxV = byModel[0]?.[1]?.views || 1;
+            const pct = Math.round((data.views / maxV) * 100);
+            return (
+              <div key={name} style={{ marginBottom: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <div style={{ width: "20px", height: "20px", borderRadius: "6px", background: `linear-gradient(135deg, ${color}, ${color}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px" }}>
+                      {model?.emoji || name[0]}
+                    </div>
+                    <span style={{ color: t.text, fontSize: "12px", fontWeight: 600 }}>{name}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <span style={{ color: t.textMuted, fontSize: "11px" }}>👁 {fmt(data.views)}</span>
+                    <span style={{ color: "#db2877", fontSize: "11px" }}>${data.revenue.toFixed(0)}</span>
+                  </div>
+                </div>
+                <div style={{ height: "5px", background: t.border, borderRadius: "3px", overflow: "hidden" }}>
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.6, delay: i * 0.08 }}
+                    style={{ height: "100%", background: `linear-gradient(90deg, ${color}, ${color}88)`, borderRadius: "3px" }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Best post + DM funnel */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          {bestPost && (
+            <div style={{ background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "16px", padding: "18px" }}>
+              <div style={{ color: "#f59e0b", fontSize: "12px", fontWeight: 700, marginBottom: "10px" }}>🏆 Лучший пост</div>
+              <div style={{ color: t.text, fontSize: "13px", fontWeight: 600, marginBottom: "6px", lineHeight: "1.4" }}>{bestPost.postTitle || `r/${bestPost.subreddit}`}</div>
+              <div style={{ color: t.textMuted, fontSize: "12px", marginBottom: "8px" }}>r/{bestPost.subreddit} · {bestPost.modelName} · {bestPost.date}</div>
+              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                {[
+                  { icon: "👁", val: fmt(bestPost.views) },
+                  { icon: "⬆️", val: bestPost.upvotes },
+                  { icon: "💬", val: bestPost.comments },
+                  { icon: "📩", val: bestPost.dms },
+                ].map((s, i) => (
+                  <span key={i} style={{ color: t.text, fontSize: "12px" }}>{s.icon} {s.val}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Avg upvote ratio */}
+          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "18px", flex: 1 }}>
+            <div style={{ color: t.text, fontSize: "13px", fontWeight: 600, marginBottom: "12px" }}>📊 Средние показатели поста</div>
+            {filtered.length === 0 ? (
+              <div style={{ color: t.textFaint, fontSize: "12px" }}>Нет данных</div>
+            ) : [
+              { label: "Просмотров", val: Math.round(total("views") / filtered.length), icon: "👁" },
+              { label: "Upvotes", val: Math.round(total("upvotes") / filtered.length), icon: "⬆️" },
+              { label: "Комментариев", val: Math.round(total("comments") / filtered.length), icon: "💬" },
+              { label: "DM", val: Math.round(total("dms") / filtered.length), icon: "📩" },
+              { label: "Upvote ratio", val: filtered.filter(e => e.upvoteRatio).length > 0 ? (filtered.reduce((s, e) => s + (e.upvoteRatio || 0), 0) / filtered.filter(e => e.upvoteRatio).length * 100).toFixed(0) + "%" : "—", icon: "📈" },
+            ].map((row, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: i < 4 ? `1px solid ${t.border}` : "none" }}>
+                <span style={{ color: t.textMuted, fontSize: "12px" }}>{row.icon} {row.label}</span>
+                <span style={{ color: t.text, fontSize: "13px", fontWeight: 700 }}>{row.val}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Table */}
+      <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", overflow: "hidden" }}>
+        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between" }}>
+          <span style={{ color: t.text, fontSize: "14px", fontWeight: 600 }}>Все записи</span>
+          <span style={{ color: t.textFaint, fontSize: "12px" }}>{filtered.length} постов</span>
+        </div>
+        <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding: "40px", textAlign: "center", color: t.textFaint }}>
+              Нет данных. Добавь первую запись через кнопку выше.
+            </div>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+              <thead>
+                <tr style={{ background: t.bgCardHover }}>
+                  {["Дата", "Модель", "Сабреддит", "Пост", "Просмотры", "⬆️", "💬", "📩 DM", "🔔", "💰", ""].map((h, i) => (
+                    <th key={i} style={{ padding: "10px 12px", color: t.textFaint, fontWeight: 600, textAlign: "left", whiteSpace: "nowrap", borderBottom: `1px solid ${t.border}` }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((e, i) => (
+                  <tr key={e.id}
+                    onMouseEnter={ev => ev.currentTarget.style.background = t.bgCardHover}
+                    onMouseLeave={ev => ev.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding: "10px 12px", color: t.textMuted, whiteSpace: "nowrap" }}>{e.date}</td>
+                    <td style={{ padding: "10px 12px", color: t.text, fontWeight: 600 }}>{e.modelName || "—"}</td>
+                    <td style={{ padding: "10px 12px", color: "#ff4500", fontWeight: 600 }}>r/{e.subreddit}</td>
+                    <td style={{ padding: "10px 12px", color: t.textMuted, maxWidth: "160px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.postTitle || "—"}</td>
+                    <td style={{ padding: "10px 12px", color: t.text, fontWeight: 600 }}>{fmt(e.views)}</td>
+                    <td style={{ padding: "10px 12px", color: "#7c3aed" }}>{e.upvotes || 0}</td>
+                    <td style={{ padding: "10px 12px", color: t.textMuted }}>{e.comments || 0}</td>
+                    <td style={{ padding: "10px 12px", color: "#10b981", fontWeight: 600 }}>{e.dms || 0}</td>
+                    <td style={{ padding: "10px 12px", color: "#f59e0b" }}>{e.newSubs || 0}</td>
+                    <td style={{ padding: "10px 12px", color: "#db2877", fontWeight: 600 }}>{e.revenue ? `$${e.revenue}` : "—"}</td>
+                    <td style={{ padding: "10px 12px" }}>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button onClick={() => startEdit(e)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", padding: "2px" }}
+                          onMouseEnter={ev => ev.currentTarget.style.color = "#7c3aed"}
+                          onMouseLeave={ev => ev.currentTarget.style.color = t.textMuted}>
+                          <Edit3 size={13} />
+                        </button>
+                        <button onClick={() => setConfirmDel(e)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", padding: "2px" }}
+                          onMouseEnter={ev => ev.currentTarget.style.color = "#ef4444"}
+                          onMouseLeave={ev => ev.currentTarget.style.color = t.textMuted}>
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Add/Edit modal */}
+      <AnimatePresence>
+        {showForm && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => { setShowForm(false); setEditEntry(null); }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary || t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "28px", width: "100%", maxWidth: "560px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "22px" }}>
+                <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 700 }}>{editEntry ? "✏️ Редактировать запись" : "➕ Новая Reddit запись"}</h3>
+                <button onClick={() => { setShowForm(false); setEditEntry(null); }} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                {/* Row 1 */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Дата</label>
+                  <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputS} />
+                </div>
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Модель</label>
+                  <select value={form.modelId} onChange={e => {
+                    const m = models.find(m => m.id === e.target.value);
+                    setForm({ ...form, modelId: e.target.value, modelName: m?.name || "" });
+                  }} style={inputS}>
+                    <option value="">Выбери...</option>
+                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Row 2 */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Сабреддит</label>
+                  <input placeholder="nsfwonlyfans18" value={form.subreddit} onChange={e => setForm({ ...form, subreddit: e.target.value.replace("r/", "") })} style={inputS} />
+                </div>
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Заголовок поста</label>
+                  <input placeholder="Заголовок..." value={form.postTitle} onChange={e => setForm({ ...form, postTitle: e.target.value })} style={inputS} />
+                </div>
+
+                {/* Divider */}
+                <div style={{ gridColumn: "1 / -1", borderBottom: `1px solid ${t.border}`, margin: "4px 0" }} />
+                <div style={{ gridColumn: "1 / -1", color: t.textMuted, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>📊 Метрики поста</div>
+
+                {[
+                  { key: "views",       label: "👁 Просмотры",    ph: "10000" },
+                  { key: "upvotes",     label: "⬆️ Upvotes",       ph: "250" },
+                  { key: "upvoteRatio", label: "📈 Upvote ratio",  ph: "0.92" },
+                  { key: "comments",    label: "💬 Комментарии",   ph: "45" },
+                  { key: "shares",      label: "🔗 Шеры",          ph: "12" },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px" }}>{f.label}</label>
+                    <input type="number" placeholder={f.ph} value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={inputS} />
+                  </div>
+                ))}
+
+                {/* Divider */}
+                <div style={{ gridColumn: "1 / -1", borderBottom: `1px solid ${t.border}`, margin: "4px 0" }} />
+                <div style={{ gridColumn: "1 / -1", color: t.textMuted, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>💰 Бизнес метрики</div>
+
+                {[
+                  { key: "dms",     label: "📩 Новых DM",       ph: "15" },
+                  { key: "newSubs", label: "🔔 Новых подписчиков", ph: "5" },
+                  { key: "revenue", label: "💰 Выручка ($)",     ph: "49.95" },
+                ].map(f => (
+                  <div key={f.key}>
+                    <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px" }}>{f.label}</label>
+                    <input type="number" placeholder={f.ph} value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} style={inputS} />
+                  </div>
+                ))}
+
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Заметка</label>
+                  <textarea placeholder="Что сработало, что нет..." value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
+                    rows={2} style={{ ...inputS, resize: "none" }} />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
+                <button onClick={save} disabled={saving || !form.subreddit}
+                  style={{ flex: 1, background: form.subreddit ? "linear-gradient(135deg, #7c3aed, #db2877)" : "rgba(124,58,237,0.3)", color: "#fff", border: "none", borderRadius: "12px", padding: "13px", fontSize: "14px", fontWeight: 700, cursor: form.subreddit ? "pointer" : "not-allowed" }}>
+                  {saving ? "Сохраняем..." : editEntry ? "Сохранить" : "Добавить"}
+                </button>
+                <button onClick={() => { setShowForm(false); setEditEntry(null); }}
+                  style={{ background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "12px", padding: "13px 20px", cursor: "pointer" }}>Отмена</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete confirm */}
+      <AnimatePresence>
+        {confirmDel && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setConfirmDel(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <motion.div initial={{ scale: 0.93 }} animate={{ scale: 1 }} exit={{ scale: 0.93 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary || t.bgCard, border: "1px solid rgba(239,68,68,0.3)", borderRadius: "18px", padding: "24px", maxWidth: "360px", width: "100%", textAlign: "center" }}>
+              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🗑️</div>
+              <h3 style={{ color: t.text, marginBottom: "8px" }}>Удалить запись?</h3>
+              <p style={{ color: t.textMuted, fontSize: "13px", marginBottom: "20px" }}>r/{confirmDel.subreddit} · {confirmDel.date}</p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button onClick={() => del(confirmDel.id)} style={{ flex: 1, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: "10px", padding: "11px", fontWeight: 600, cursor: "pointer" }}>Удалить</button>
+                <button onClick={() => setConfirmDel(null)} style={{ flex: 1, background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "10px", padding: "11px", cursor: "pointer" }}>Отмена</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
