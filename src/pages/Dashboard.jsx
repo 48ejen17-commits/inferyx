@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
+import LiveBackground from "../components/LiveBackground";
 import {
   collection, onSnapshot, orderBy, query, limit,
   setDoc, doc, getDoc
@@ -655,11 +656,16 @@ export default function Dashboard() {
   ];
 
   return (
-    <div>
+    <div style={{ position: "relative" }}>
+      <LiveBackground />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: "28px" }}>
         <h1 style={{ fontSize: "26px", fontWeight: 700, color: t.text, marginBottom: "6px" }}>
-          Привет, {profile?.name?.split(" ")[0] || "—"} 👋
+          {(() => {
+            const h = new Date().getHours();
+            const greet = h < 5 ? "Ночная смена 🌙" : h < 12 ? "Доброе утро ☀️" : h < 17 ? "Добрый день 👋" : h < 22 ? "Добрый вечер 🌆" : "Ночная смена 🌙";
+            return `${greet}, ${profile?.name?.split(" ")[0] || "—"}`;
+          })()}
         </h1>
         <p style={{ color: t.textMuted, fontSize: "14px" }}>
           {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })} · Inferyx
