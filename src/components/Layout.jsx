@@ -7,7 +7,7 @@ import { collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc, s
 import {
   LayoutDashboard, TrendingUp, CheckSquare, Users, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight, MessageSquare,
-  CalendarDays, FileText, Sun, Moon, UserCircle, Clipboard
+  CalendarDays, FileText, Sun, Moon, UserCircle, Clipboard, Shield
 } from "lucide-react";
 
 // Online = lastActiveAt within 2 minutes OR isOnline flag true and lastActiveAt within 5 min
@@ -261,6 +261,16 @@ export default function Layout({ children }) {
               {!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
+          {/* Admin only for owner */}
+          {currentProfile?.role === "owner" && (
+            <NavLink to="/admin"
+              className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+              style={{ justifyContent: collapsed ? "center" : "flex-start", marginTop: "6px", borderTop: `1px solid ${t.border}`, paddingTop: "8px" }}
+              title={collapsed ? "Admin" : undefined}>
+              <Shield size={18} style={{ flexShrink: 0, color: "#f59e0b" }} />
+              {!collapsed && <span style={{ color: "#f59e0b", fontWeight: 700 }}>Admin Panel</span>}
+            </NavLink>
+          )}
         </nav>
 
         <div style={{ borderTop: `1px solid ${t.border}`, paddingTop: "12px", marginTop: "12px" }}>

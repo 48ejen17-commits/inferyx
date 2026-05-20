@@ -18,6 +18,7 @@ import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Tasks from "./pages/Tasks";
+import Admin from "./pages/Admin";
 
 function ProfileWrapper() {
   const { userId } = useParams();
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />
+      <Route path="/admin" element={<PrivateRoute><Layout><Admin /></Layout></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Layout><Profile /></Layout></PrivateRoute>} />
       <Route path="/profile/:userId" element={<PrivateRoute><Layout><ProfileWrapper /></Layout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
