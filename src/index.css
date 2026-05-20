@@ -15,3 +15,23 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Fix native select dropdowns on all OS/browsers */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: #1e1b4b;
+  color: #e2e8f0;
+}
+
+/* Light theme override */
+[data-theme="light"] select {
+  color-scheme: light;
+}
+
+[data-theme="light"] select option {
+  background-color: #f8fafc;
+  color: #0f172a;
+}

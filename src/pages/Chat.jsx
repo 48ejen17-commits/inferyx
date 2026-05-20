@@ -189,14 +189,18 @@ export default function Chat() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
             {users.slice(0, 5).map(u => (
-              <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <div style={{ position: "relative" }}>
+              <div key={u.id}
+                onClick={() => navigate(`/profile/${u.uid || u.id}`)}
+                style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 6px", borderRadius: "8px", cursor: "pointer", transition: "background 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = t.bgCardHover}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <div style={{ position: "relative", flexShrink: 0 }}>
                   <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: `linear-gradient(135deg, ${ROLE_COLORS[u.role]}, ${ROLE_COLORS[u.role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#fff" }}>
                     {u.avatarEmoji || (u.name || "?")[0].toUpperCase()}
                   </div>
                   <div style={{ position: "absolute", bottom: -1, right: -1, width: "8px", height: "8px", borderRadius: "50%", background: STATUS_COLOR[getOnlineStatus(u)], border: `1.5px solid ${t.bg}` }} />
                 </div>
-                <span style={{ color: t.textMuted, fontSize: "12px" }}>{u.name}</span>
+                <span style={{ color: t.textMuted, fontSize: "12px", flex: 1 }}>{u.name}</span>
               </div>
             ))}
           </div>

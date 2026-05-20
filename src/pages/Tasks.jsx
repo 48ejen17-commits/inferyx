@@ -119,12 +119,12 @@ export default function Tasks() {
         <div style={{ display: "flex", gap: "10px", alignItems: "center", flexWrap: "wrap" }}>
           {/* Filters */}
           <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
-            style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none", colorScheme: "dark" }}>
+            style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none" }}>
             <option value="all">Все исполнители</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
           <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
-            style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none", colorScheme: "dark" }}>
+            style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none" }}>
             <option value="all">Все приоритеты</option>
             {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.icon} {p.label}</option>)}
           </select>
@@ -292,7 +292,7 @@ export default function Tasks() {
                   {canManage ? (
                     <select value={selectedTask.column}
                       onChange={e => { updateTask(selectedTask.id, { column: e.target.value }); setSelectedTask({ ...selectedTask, column: e.target.value }); }}
-                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%", colorScheme: "dark" }}>
+                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%" }}>
                       {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
                     </select>
                   ) : (
@@ -308,7 +308,7 @@ export default function Tasks() {
                   {canManage ? (
                     <select value={selectedTask.priority}
                       onChange={e => { updateTask(selectedTask.id, { priority: e.target.value }); setSelectedTask({ ...selectedTask, priority: e.target.value }); }}
-                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%", colorScheme: "dark" }}>
+                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%" }}>
                       {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.icon} {p.label}</option>)}
                     </select>
                   ) : (
@@ -328,7 +328,7 @@ export default function Tasks() {
                         updateTask(selectedTask.id, { assigneeId: e.target.value, assigneeName: u?.name || "—", assigneeRole: u?.role || "" });
                         setSelectedTask({ ...selectedTask, assigneeId: e.target.value, assigneeName: u?.name || "—" });
                       }}
-                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%", colorScheme: "dark" }}>
+                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%" }}>
                       <option value="">Не назначен</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                     </select>
@@ -343,7 +343,7 @@ export default function Tasks() {
                   {canManage ? (
                     <input type="date" value={selectedTask.dueDate}
                       onChange={e => { updateTask(selectedTask.id, { dueDate: e.target.value }); setSelectedTask({ ...selectedTask, dueDate: e.target.value }); }}
-                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%", colorScheme: "dark" }} />
+                      style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%" }} />
                   ) : (
                     <div style={{ color: isOverdue(selectedTask.dueDate) ? "#ef4444" : t.text, fontSize: "13px", fontWeight: 600 }}>
                       {selectedTask.dueDate ? new Date(selectedTask.dueDate).toLocaleDateString("ru-RU") : "—"}
@@ -401,13 +401,13 @@ export default function Tasks() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div>
                     <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Приоритет</label>
-                    <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...inputStyle, colorScheme: "dark" }}>
+                    <select value={form.priority} onChange={e => setForm({ ...form, priority: e.target.value })} style={{ ...inputStyle }}>
                       {PRIORITIES.map(p => <option key={p.val} value={p.val}>{p.icon} {p.label}</option>)}
                     </select>
                   </div>
                   <div>
                     <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Колонка</label>
-                    <select value={form.column} onChange={e => setForm({ ...form, column: e.target.value })} style={{ ...inputStyle, colorScheme: "dark" }}>
+                    <select value={form.column} onChange={e => setForm({ ...form, column: e.target.value })} style={{ ...inputStyle }}>
                       {COLUMNS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
                     </select>
                   </div>
@@ -416,14 +416,14 @@ export default function Tasks() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
                   <div>
                     <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Исполнитель</label>
-                    <select value={form.assigneeId} onChange={e => setForm({ ...form, assigneeId: e.target.value })} style={{ ...inputStyle, colorScheme: "dark" }}>
+                    <select value={form.assigneeId} onChange={e => setForm({ ...form, assigneeId: e.target.value })} style={{ ...inputStyle }}>
                       <option value="">Не назначен</option>
                       {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                     </select>
                   </div>
                   <div>
                     <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Дедлайн</label>
-                    <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} style={{ ...inputStyle, colorScheme: "dark" }} />
+                    <input type="date" value={form.dueDate} onChange={e => setForm({ ...form, dueDate: e.target.value })} style={{ ...inputStyle }} />
                   </div>
                 </div>
 

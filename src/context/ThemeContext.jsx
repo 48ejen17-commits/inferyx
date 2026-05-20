@@ -49,6 +49,7 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     localStorage.setItem("inferyx-theme", mode);
     document.body.style.background = THEMES[mode].bg;
+    document.documentElement.setAttribute("data-theme", mode);
   }, [mode]);
 
   const toggle = () => setMode(m => m === "dark" ? "light" : "dark");
