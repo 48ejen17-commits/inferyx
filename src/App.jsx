@@ -31,6 +31,14 @@ function PrivateRoute({ children }) {
   return user ? children : <Navigate to="/login" />;
 }
 
+function OwnerRoute({ children }) {
+  const { user, loading, profile } = useAuth();
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" />;
+  if (profile?.role?.toLowerCase() !== "owner") return <Navigate to="/" />;
+  return children;
+}
+
 function AppRoutes() {
   const { user } = useAuth();
   return (
@@ -47,7 +55,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />
-      <Route path="/admin" element={<PrivateRoute><Layout><Admin /></Layout></PrivateRoute>} />
+      <Route path="/admin" element={<OwnerRoute><Layout><Admin /></Layout></OwnerRoute>} />
       <Route path="/profile" element={<PrivateRoute><Layout><Profile /></Layout></PrivateRoute>} />
       <Route path="/profile/:userId" element={<PrivateRoute><Layout><ProfileWrapper /></Layout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />

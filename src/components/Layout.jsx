@@ -262,7 +262,7 @@ export default function Layout({ children }) {
             </NavLink>
           ))}
           {/* Admin only for owner */}
-          {currentProfile?.role === "owner" && (
+          {currentProfile?.role?.toLowerCase() === "owner" && (
             <NavLink to="/admin"
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               style={{ justifyContent: collapsed ? "center" : "flex-start", marginTop: "6px", borderTop: `1px solid ${t.border}`, paddingTop: "8px" }}
