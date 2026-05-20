@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, orderBy, query, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth, ROLE_COLORS, ROLE_LABELS } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -10,6 +11,7 @@ const BUBBLE_RADIUS = "12px"; // одинаковое для всех
 
 export default function Chat() {
   const { db, user, profile } = useAuth();
+  const navigate = useNavigate();
   const { theme } = useTheme();
   const t = theme;
   const [rooms, setRooms] = useState([]);
@@ -209,7 +211,12 @@ export default function Chat() {
                     {/* Имя */}
                     {!isMe && (
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" }}>
-                        <span style={{ color: roleColor, fontSize: "12px", fontWeight: 700 }}>{group.userName}</span>
+                        <span onClick={() => navigate(`/profile/${group.userId}`)}
+                          style={{ color: roleColor, fontSize: "12px", fontWeight: 700, cursor: "pointer", textDecoration: "none" }}
+                          onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+                          onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
+                          {group.userName}
+                        </span>
                         <span style={{ color: t.textFaint, fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS[group.userRole] || group.userRole}</span>
                       </div>
                     )}

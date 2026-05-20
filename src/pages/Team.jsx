@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { useAuth, ROLES, ROLE_LABELS, ROLE_LABELS_DISPLAY, ROLE_COLORS } from "../context/AuthContext";
@@ -9,6 +10,7 @@ import { Plus, X, Users, Shield, TrendingUp, Activity, Lock, Trash2, AlertTriang
 export default function Team() {
   const { db, profile } = useAuth();
   const { theme } = useTheme();
+  const navigate = useNavigate();
   const t = theme;
   const [users, setUsers] = useState([]);
   const [entries, setEntries] = useState([]);
@@ -249,6 +251,14 @@ export default function Team() {
                   <span style={{ color: t.textMuted, fontSize: "13px" }}>Роль Owner нельзя изменить через интерфейс</span>
                 </div>
               )}
+
+              {/* Open profile button */}
+              <div style={{ marginTop: "16px" }}>
+                <button onClick={() => { navigate(`/profile/${selected.uid || selected.id}`); setSelected(null); }}
+                  style={{ width: "100%", background: "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+                  👤 Открыть профиль
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

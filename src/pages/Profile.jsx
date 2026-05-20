@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, deleteDoc } from "firebase/firestore";
 import { useAuth, ROLE_COLORS, ROLE_LABELS } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { Edit3, X, Plus, Trash2, Send, MessageCircle, FileText, Smile, RotateCcw, Check } from "lucide-react";
+import { Edit3, X, Plus, Trash2, Send, MessageCircle, FileText, Smile, RotateCcw, Check, ChevronDown, ChevronUp } from "lucide-react";
 
 const AVATAR_EMOJIS = [
   "😎","🤩","🦊","🐺","🐱","🦁","🐯","🦄","🐸","🤖",
@@ -11,34 +11,191 @@ const AVATAR_EMOJIS = [
   "🎪","🎨","🎸","🎮","💀","🧠","👻","🦋","🌈","❄️",
   "🍕","🌴","🎃","🦅","🐉","🌙","☀️","🎲","🃏","🎰",
 ];
-
 const AVATAR_COLORS = [
   "#7c3aed","#db2777","#0ea5e9","#10b981","#f59e0b",
   "#ef4444","#8b5cf6","#06b6d4","#84cc16","#f97316",
   "#6366f1","#ec4899","#14b8a6","#a855f7","#3b82f6",
 ];
-
 const BRUSH_COLORS = [
-  "#ffffff","#000000","#7c3aed","#db2777","#ef4444",
+  "#ffffff","#000000","#7c3aed","#db2877","#ef4444",
   "#f59e0b","#10b981","#0ea5e9","#a855f7","#f97316",
   "#06b6d4","#84cc16","#ec4899","#6366f1","#94a3b8",
 ];
-
 const BRUSH_SIZES = [2, 5, 10, 16, 24];
-
 const BG_PRESETS = [
-  { label: "Фиолет", stops: ["#7c3aed", "#db2777"] },
-  { label: "Океан",  stops: ["#0ea5e9", "#10b981"] },
-  { label: "Закат",  stops: ["#f59e0b", "#ef4444"] },
-  { label: "Ночь",   stops: ["#0f172a", "#1e1b4b"] },
-  { label: "Розовый",stops: ["#ec4899", "#f97316"] },
-  { label: "Мята",   stops: ["#10b981", "#06b6d4"] },
-  { label: "Белый",  stops: ["#ffffff", "#f1f5f9"] },
-  { label: "Серый",  stops: ["#334155", "#1e293b"] },
-  { label: "Золото", stops: ["#f59e0b", "#84cc16"] },
-  { label: "Космос", stops: ["#1e1b4b", "#4c1d95"] },
+  { label: "Фиолет", stops: ["#7c3aed","#db2877"] },
+  { label: "Океан",  stops: ["#0ea5e9","#10b981"] },
+  { label: "Закат",  stops: ["#f59e0b","#ef4444"] },
+  { label: "Ночь",   stops: ["#0f172a","#1e1b4b"] },
+  { label: "Розовый",stops: ["#ec4899","#f97316"] },
+  { label: "Мята",   stops: ["#10b981","#06b6d4"] },
+  { label: "Белый",  stops: ["#ffffff","#f1f5f9"] },
+  { label: "Серый",  stops: ["#334155","#1e293b"] },
+  { label: "Золото", stops: ["#f59e0b","#84cc16"] },
+  { label: "Космос", stops: ["#1e1b4b","#4c1d95"] },
 ];
 
+// ── PostCard with comments ────────────────────────────────────────────────────
+function PostCard({ post, isOwner, onDelete, db, user, myProfile, t }) {
+  const [comments, setComments] = useState([]);
+  const [showComments, setShowComments] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, "post_comments"), where("postId", "==", post.id)),
+      snap => setComments(
+        snap.docs.map(d => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => a.createdAt?.localeCompare?.(b.createdAt) || 0)
+      )
+    );
+  }, [db, post.id]);
+
+  const sendComment = async () => {
+    if (!commentText.trim() || sending) return;
+    setSending(true);
+    try {
+      await addDoc(collection(db, "post_comments"), {
+        postId: post.id,
+        text: commentText.trim(),
+        userId: user.uid,
+        userName: myProfile?.name || "—",
+        userRole: myProfile?.role || "",
+        userEmoji: myProfile?.avatarEmoji || "",
+        userColor: myProfile?.avatarColor || ROLE_COLORS[myProfile?.role] || "#7c3aed",
+        createdAt: new Date().toISOString(),
+        time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      });
+      setCommentText("");
+    } catch (e) { console.error(e); }
+    setSending(false);
+  };
+
+  const deleteComment = async (id) => {
+    await deleteDoc(doc(db, "post_comments", id));
+  };
+
+  const rc = ROLE_COLORS[post.userRole] || "#64748b";
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", marginBottom: "14px", overflow: "hidden" }}>
+
+      {/* Post body */}
+      <div style={{ padding: "20px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
+          {/* Author */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "34px", height: "34px", borderRadius: "10px", background: `linear-gradient(135deg, ${post.userColor || rc}, ${post.userColor || rc}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: post.userEmoji ? "16px" : "13px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+              {post.userEmoji || (post.userName || "?")[0].toUpperCase()}
+            </div>
+            <div>
+              <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{post.userName}</div>
+              <div style={{ color: t.textFaint, fontSize: "11px" }}>{post.date} в {post.time}</div>
+            </div>
+          </div>
+          {isOwner && (
+            <button onClick={() => onDelete(post.id)}
+              style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "4px" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Title */}
+        {post.title && (
+          <h4 style={{ color: t.text, fontSize: "16px", fontWeight: 700, margin: "0 0 8px 0", lineHeight: 1.4 }}>
+            {post.title}
+          </h4>
+        )}
+        {/* Text */}
+        <p style={{ color: t.textSecondary || t.textMuted, fontSize: "14px", lineHeight: "1.7", margin: 0 }}>
+          {post.text}
+        </p>
+      </div>
+
+      {/* Comments toggle bar */}
+      <div style={{ borderTop: `1px solid ${t.border}`, padding: "10px 20px", display: "flex", alignItems: "center", gap: "12px" }}>
+        <button onClick={() => setShowComments(v => !v)}
+          style={{ display: "flex", alignItems: "center", gap: "6px", background: "none", border: "none", color: t.textMuted, cursor: "pointer", fontSize: "13px", fontWeight: 500, padding: 0 }}>
+          💬 {comments.length > 0 ? `${comments.length} комментар${comments.length === 1 ? "ий" : comments.length < 5 ? "ия" : "иев"}` : "Комментировать"}
+          {showComments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+
+      {/* Comments section */}
+      <AnimatePresence>
+        {showComments && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            style={{ borderTop: `1px solid ${t.border}`, overflow: "hidden" }}>
+            <div style={{ padding: "14px 20px", display: "flex", flexDirection: "column", gap: "12px" }}>
+
+              {/* Comment list */}
+              {comments.length === 0 ? (
+                <div style={{ color: t.textFaint, fontSize: "13px", textAlign: "center", padding: "8px 0" }}>
+                  Пока нет комментариев. Будь первым!
+                </div>
+              ) : comments.map(c => {
+                const canDelete = c.userId === user.uid || isOwner;
+                const crc = c.userColor || ROLE_COLORS[c.userRole] || "#64748b";
+                return (
+                  <div key={c.id} style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+                    <div style={{ width: "28px", height: "28px", borderRadius: "8px", background: `linear-gradient(135deg, ${crc}, ${crc}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: c.userEmoji ? "13px" : "11px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                      {c.userEmoji || (c.userName || "?")[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, background: t.bgCardHover || t.bgCard, borderRadius: "10px", padding: "8px 12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                        <span style={{ color: t.text, fontSize: "12px", fontWeight: 600 }}>{c.userName}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ color: t.textFaint, fontSize: "11px" }}>{c.time}</span>
+                          {canDelete && (
+                            <button onClick={() => deleteComment(c.id)}
+                              style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: 0, lineHeight: 1 }}
+                              onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                              onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p style={{ color: t.textSecondary || t.textMuted, fontSize: "13px", margin: 0, lineHeight: "1.5" }}>{c.text}</p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* New comment input */}
+              <div style={{ display: "flex", gap: "8px", alignItems: "flex-end", marginTop: "4px" }}>
+                <div style={{ width: "28px", height: "28px", borderRadius: "8px", background: `linear-gradient(135deg, ${myProfile?.avatarColor || "#7c3aed"}, ${myProfile?.avatarColor || "#7c3aed"}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: myProfile?.avatarEmoji ? "13px" : "11px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+                  {myProfile?.avatarEmoji || (myProfile?.name || "?")[0].toUpperCase()}
+                </div>
+                <div style={{ flex: 1, display: "flex", gap: "8px", alignItems: "center" }}>
+                  <input
+                    placeholder="Написать комментарий..."
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendComment()}
+                    style={{ flex: 1, background: t.bgInput || t.bgCard, color: t.text, border: `1px solid ${t.borderInput || t.border}`, borderRadius: "10px", padding: "8px 12px", fontSize: "13px", outline: "none", fontFamily: "inherit" }}
+                  />
+                  <motion.button onClick={sendComment} disabled={!commentText.trim() || sending}
+                    whileTap={{ scale: 0.93 }}
+                    style={{ background: commentText.trim() ? "linear-gradient(135deg, #7c3aed, #db2877)" : "rgba(124,58,237,0.2)", border: "none", borderRadius: "10px", padding: "8px 14px", color: "#fff", cursor: commentText.trim() ? "pointer" : "not-allowed", display: "flex", alignItems: "center" }}>
+                    <Send size={14} />
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+// ── Main Profile ──────────────────────────────────────────────────────────────
 export default function Profile({ userId: propUserId }) {
   const { db, user, profile: myProfile } = useAuth();
   const { theme } = useTheme();
@@ -55,8 +212,9 @@ export default function Profile({ userId: propUserId }) {
   const [showNewPost, setShowNewPost] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showBannerDraw, setShowBannerDraw] = useState(false);
-  const [newPost, setNewPost] = useState({ text: "", emoji: "" });
+  const [newPost, setNewPost] = useState({ title: "", text: "" });
   const [editForm, setEditForm] = useState({ name: "", telegram: "", note: "", bio: "" });
+  const [saving, setSaving] = useState(false);
 
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -67,7 +225,7 @@ export default function Profile({ userId: propUserId }) {
 
   useEffect(() => {
     if (!targetId) return;
-    const unsub = onSnapshot(collection(db, "users"), snap => {
+    return onSnapshot(collection(db, "users"), snap => {
       const found = snap.docs.find(d => d.data().uid === targetId || d.id === targetId);
       if (found) {
         setProfileData(found.data());
@@ -75,7 +233,6 @@ export default function Profile({ userId: propUserId }) {
         setEditForm({ name: found.data().name || "", telegram: found.data().telegram || "", note: found.data().note || "", bio: found.data().bio || "" });
       }
     });
-    return () => unsub();
   }, [db, targetId]);
 
   useEffect(() => {
@@ -89,7 +246,7 @@ export default function Profile({ userId: propUserId }) {
     return () => unsubs.forEach(u => u());
   }, [db, targetId]);
 
-  // Fill canvas with selected gradient
+  // Canvas
   const fillCanvasBackground = (canvas, stops) => {
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -100,7 +257,6 @@ export default function Profile({ userId: propUserId }) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   };
 
-  // Init canvas when modal opens
   useEffect(() => {
     if (!showBannerDraw) return;
     const canvas = canvasRef.current;
@@ -121,8 +277,7 @@ export default function Profile({ userId: propUserId }) {
   const applyBackground = (preset) => {
     setSelectedBg(preset);
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    fillCanvasBackground(canvas, preset.stops);
+    if (canvas) fillCanvasBackground(canvas, preset.stops);
   };
 
   const getPos = (e, canvas) => {
@@ -135,7 +290,6 @@ export default function Profile({ userId: propUserId }) {
   };
 
   const startDraw = (e) => { e.preventDefault(); setIsDrawing(true); lastPos.current = getPos(e, canvasRef.current); };
-
   const draw = (e) => {
     e.preventDefault();
     if (!isDrawing || !canvasRef.current) return;
@@ -152,15 +306,8 @@ export default function Profile({ userId: propUserId }) {
     ctx.stroke();
     lastPos.current = pos;
   };
-
   const stopDraw = () => setIsDrawing(false);
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    fillCanvasBackground(canvas, selectedBg.stops);
-  };
-
+  const clearCanvas = () => { const canvas = canvasRef.current; if (canvas) fillCanvasBackground(canvas, selectedBg.stops); };
   const saveBanner = async () => {
     if (!canvasRef.current || !profileDocId) return;
     const dataUrl = canvasRef.current.toDataURL("image/png");
@@ -170,7 +317,9 @@ export default function Profile({ userId: propUserId }) {
 
   const saveProfile = async () => {
     if (!profileDocId) return;
+    setSaving(true);
     await updateDoc(doc(db, "users", profileDocId), { name: editForm.name, telegram: editForm.telegram, note: editForm.note, bio: editForm.bio });
+    setSaving(false);
     setEditing(false);
   };
 
@@ -180,36 +329,41 @@ export default function Profile({ userId: propUserId }) {
   };
 
   const addPost = async () => {
-    if (!newPost.text.trim()) return;
+    if (!newPost.title.trim() && !newPost.text.trim()) return;
+    setSaving(true);
     try {
       await addDoc(collection(db, "profile_posts"), {
+        title: newPost.title.trim(),
         text: newPost.text.trim(),
-        emoji: newPost.emoji,
         userId: user.uid,
         userName: myProfile?.name || "—",
         userRole: myProfile?.role || "",
+        userEmoji: myProfile?.avatarEmoji || "",
+        userColor: myProfile?.avatarColor || ROLE_COLORS[myProfile?.role] || "#7c3aed",
         createdAt: new Date().toISOString(),
         date: new Date().toLocaleDateString("ru-RU"),
         time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
       });
-      setNewPost({ text: "", emoji: "" });
+      setNewPost({ title: "", text: "" });
       setShowNewPost(false);
     } catch (e) {
       console.error("addPost error:", e);
-      alert("Ошибка при публикации: " + e.message);
+      alert("Ошибка: " + e.message);
     }
+    setSaving(false);
   };
 
-  const deletePost = async (id) => await deleteDoc(doc(db, "profile_posts", id));
+  const deletePost = async (id) => {
+    await deleteDoc(doc(db, "profile_posts", id));
+  };
 
   const roleColor = ROLE_COLORS[profileData?.role] || "#64748b";
   const totalTraffic = entries.reduce((s, e) => s + (e.traffic || 0), 0);
   const avatarColor = profileData?.avatarColor || roleColor;
   const telegramHandle = profileData?.telegram?.replace("@", "");
+  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput || t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", width: "100%" };
 
   if (!profileData) return <div style={{ textAlign: "center", padding: "60px", color: t.textMuted }}>Загрузка...</div>;
-
-  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", width: "100%" };
 
   return (
     <div style={{ maxWidth: "720px", margin: "0 auto" }}>
@@ -247,7 +401,7 @@ export default function Profile({ userId: propUserId }) {
             </div>
             {isMe && !editing && (
               <button onClick={() => setEditing(true)}
-                style={{ display: "flex", alignItems: "center", gap: "6px", background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textSecondary, borderRadius: "10px", padding: "8px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                style={{ display: "flex", alignItems: "center", gap: "6px", background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textSecondary || t.textMuted, borderRadius: "10px", padding: "8px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
                 <Edit3 size={14} />Редактировать
               </button>
             )}
@@ -258,16 +412,14 @@ export default function Profile({ userId: propUserId }) {
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
                 <h2 style={{ color: t.text, fontSize: "20px", fontWeight: 700 }}>{profileData.name}</h2>
                 <div style={{ background: `${roleColor}20`, color: roleColor, fontSize: "11px", fontWeight: 700, padding: "3px 10px", borderRadius: "20px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  {ROLE_LABELS[profileData.role]}
+                  {ROLE_LABELS[profileData.role] || profileData.role}
                 </div>
               </div>
-              {profileData.bio && <p style={{ color: t.textSecondary, fontSize: "14px", marginBottom: "12px", lineHeight: "1.6" }}>{profileData.bio}</p>}
+              {profileData.bio && <p style={{ color: t.textSecondary || t.textMuted, fontSize: "14px", marginBottom: "12px", lineHeight: "1.6" }}>{profileData.bio}</p>}
               <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "16px" }}>
                 {telegramHandle && (
                   <a href={`https://t.me/${telegramHandle}`} target="_blank" rel="noopener noreferrer"
-                    style={{ display: "flex", alignItems: "center", gap: "6px", textDecoration: "none", padding: "5px 12px", background: "rgba(14,165,233,0.1)", border: "1px solid rgba(14,165,233,0.25)", borderRadius: "20px", transition: "background 0.2s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "rgba(14,165,233,0.2)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "rgba(14,165,233,0.1)"}>
+                    style={{ display: "flex", alignItems: "center", gap: "6px", textDecoration: "none", padding: "5px 12px", background: "rgba(14,165,233,0.1)", border: "1px solid rgba(14,165,233,0.25)", borderRadius: "20px" }}>
                     <MessageCircle size={13} style={{ color: "#0ea5e9" }} />
                     <span style={{ color: "#0ea5e9", fontSize: "13px", fontWeight: 600 }}>@{telegramHandle}</span>
                   </a>
@@ -293,9 +445,9 @@ export default function Profile({ userId: propUserId }) {
               <div><label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Имя</label><input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} style={inputStyle} /></div>
               <div><label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>О себе</label><textarea value={editForm.bio} onChange={e => setEditForm({ ...editForm, bio: e.target.value })} style={{ ...inputStyle, resize: "none" }} rows={2} /></div>
               <div><label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Telegram</label><input value={editForm.telegram} onChange={e => setEditForm({ ...editForm, telegram: e.target.value })} style={inputStyle} placeholder="@username" /></div>
-              <div><label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Заметка (видна всем)</label><input value={editForm.note} onChange={e => setEditForm({ ...editForm, note: e.target.value })} style={inputStyle} placeholder="МСК +3, удалёнка..." /></div>
+              <div><label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Заметка</label><input value={editForm.note} onChange={e => setEditForm({ ...editForm, note: e.target.value })} style={inputStyle} placeholder="МСК +3, удалёнка..." /></div>
               <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={saveProfile} style={{ flex: 1, background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>Сохранить</button>
+                <button onClick={saveProfile} disabled={saving} style={{ flex: 1, background: "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>{saving ? "Сохраняем..." : "Сохранить"}</button>
                 <button onClick={() => setEditing(false)} style={{ background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "10px", padding: "11px 16px", cursor: "pointer" }}>Отмена</button>
               </div>
             </div>
@@ -308,56 +460,48 @@ export default function Profile({ userId: propUserId }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
           <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 600 }}>Посты</h3>
           {isMe && (
-            <button onClick={() => setShowNewPost(!showNewPost)}
-              style={{ display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "10px", padding: "8px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+            <button onClick={() => setShowNewPost(v => !v)}
+              style={{ display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "10px", padding: "8px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
               <Plus size={14} />Написать пост
             </button>
           )}
         </div>
+
         <AnimatePresence>
           {showNewPost && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
               style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px", marginBottom: "16px" }}>
-              <div style={{ display: "flex", gap: "10px", marginBottom: "10px", alignItems: "center" }}>
-                <input placeholder="🎉" value={newPost.emoji} onChange={e => setNewPost({ ...newPost, emoji: e.target.value })} style={{ ...inputStyle, width: "80px" }} maxLength={4} />
-                <span style={{ color: t.textFaint, fontSize: "12px" }}>эмодзи (необязательно)</span>
-              </div>
-              <textarea placeholder="Напиши что-нибудь для команды..." value={newPost.text} onChange={e => setNewPost({ ...newPost, text: e.target.value })}
-                rows={3} style={{ ...inputStyle, resize: "none", marginBottom: "12px" }} />
+              <input
+                placeholder="Заголовок поста..."
+                value={newPost.title}
+                onChange={e => setNewPost({ ...newPost, title: e.target.value })}
+                style={{ ...inputStyle, marginBottom: "10px", fontWeight: 600, fontSize: "15px" }}
+              />
+              <textarea
+                placeholder="Напиши что-нибудь для команды..."
+                value={newPost.text}
+                onChange={e => setNewPost({ ...newPost, text: e.target.value })}
+                rows={4}
+                style={{ ...inputStyle, resize: "none", marginBottom: "12px" }}
+              />
               <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={addPost} disabled={!newPost.text.trim()}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", background: newPost.text.trim() ? "linear-gradient(135deg, #7c3aed, #db2777)" : t.bgCardHover, color: newPost.text.trim() ? "#fff" : t.textMuted, border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: newPost.text.trim() ? "pointer" : "not-allowed" }}>
-                  <Send size={14} />Опубликовать
+                <button onClick={addPost} disabled={saving || (!newPost.title.trim() && !newPost.text.trim())}
+                  style={{ display: "flex", alignItems: "center", gap: "6px", background: (newPost.title.trim() || newPost.text.trim()) ? "linear-gradient(135deg, #7c3aed, #db2877)" : t.bgCardHover, color: (newPost.title.trim() || newPost.text.trim()) ? "#fff" : t.textMuted, border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
+                  <Send size={14} />{saving ? "Публикуем..." : "Опубликовать"}
                 </button>
                 <button onClick={() => setShowNewPost(false)} style={{ background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "10px", padding: "10px 16px", cursor: "pointer" }}>Отмена</button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
         {posts.length === 0 ? (
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "40px", textAlign: "center" }}>
             <div style={{ fontSize: "28px", marginBottom: "10px" }}>📝</div>
-            <div style={{ color: t.textFaint }}>{isMe ? "Напиши свой первый пост!" : "Нет постов"}</div>
+            <div style={{ color: t.textFaint || t.textMuted }}>{isMe ? "Напиши свой первый пост!" : "Нет постов"}</div>
           </div>
-        ) : posts.map((post, i) => (
-          <motion.div key={post.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-            style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "18px 20px", marginBottom: "12px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                {post.emoji && <div style={{ fontSize: "26px", marginBottom: "8px" }}>{post.emoji}</div>}
-                <p style={{ color: t.text, fontSize: "15px", lineHeight: "1.6", margin: 0 }}>{post.text}</p>
-              </div>
-              {isMe && (
-                <button onClick={() => deletePost(post.id)}
-                  style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "4px", marginLeft: "12px" }}
-                  onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
-                  onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
-                  <Trash2 size={14} />
-                </button>
-              )}
-            </div>
-            <div style={{ color: t.textFaint, fontSize: "12px", marginTop: "10px" }}>{post.date} в {post.time}</div>
-          </motion.div>
+        ) : posts.map(post => (
+          <PostCard key={post.id} post={post} isOwner={isMe} onDelete={deletePost} db={db} user={user} myProfile={myProfile} t={t} />
         ))}
       </div>
 
@@ -365,15 +509,17 @@ export default function Profile({ userId: propUserId }) {
       <AnimatePresence>
         {showAvatarPicker && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowAvatarPicker(false)}
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              style={{ background: t.bgSecondary, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "24px", width: "100%", maxWidth: "380px", maxHeight: "80vh", overflowY: "auto" }}>
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary || t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "24px", width: "100%", maxWidth: "380px", maxHeight: "80vh", overflowY: "auto" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                 <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 600 }}>Аватарка</h3>
                 <button onClick={() => setShowAvatarPicker(false)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
               </div>
               <div style={{ textAlign: "center", marginBottom: "16px" }}>
-                <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: `linear-gradient(135deg, ${profileData?.avatarColor || avatarColor}, ${profileData?.avatarColor || avatarColor}99)`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "28px", color: "#fff", fontWeight: 700 }}>
+                <div style={{ width: "64px", height: "64px", borderRadius: "16px", background: `linear-gradient(135deg, ${avatarColor}, ${avatarColor}99)`, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "28px", color: "#fff", fontWeight: 700 }}>
                   {profileData?.avatarEmoji || (profileData.name || "?")[0].toUpperCase()}
                 </div>
               </div>
@@ -410,32 +556,26 @@ export default function Profile({ userId: propUserId }) {
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              style={{ background: t.bgSecondary, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "20px", width: "100%", maxWidth: "660px" }}>
+              style={{ background: t.bgSecondary || t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "20px", width: "100%", maxWidth: "660px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
                 <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 600 }}>🎨 Нарисуй шапку</h3>
                 <button onClick={() => setShowBannerDraw(false)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
               </div>
-
-              {/* Canvas */}
               <canvas ref={canvasRef} width={620} height={130}
                 onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
                 onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw}
                 style={{ width: "100%", height: "auto", borderRadius: "12px", cursor: "crosshair", display: "block", border: `1px solid ${t.border}`, touchAction: "none" }} />
-
-              {/* BG presets */}
               <div style={{ marginTop: "12px", marginBottom: "12px" }}>
                 <div style={{ color: t.textMuted, fontSize: "11px", fontWeight: 700, marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Фон</div>
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                   {BG_PRESETS.map(preset => (
                     <button key={preset.label} onClick={() => applyBackground(preset)}
-                      style={{ padding: "5px 12px", borderRadius: "20px", border: `1.5px solid ${selectedBg.label === preset.label ? "#7c3aed" : t.border}`, background: `linear-gradient(135deg, ${preset.stops[0]}, ${preset.stops[1]})`, color: preset.stops[0] === "#ffffff" || preset.stops[0] === "#f1f5f9" ? "#000" : "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                      style={{ padding: "5px 12px", borderRadius: "20px", border: `1.5px solid ${selectedBg.label === preset.label ? "#7c3aed" : t.border}`, background: `linear-gradient(135deg, ${preset.stops[0]}, ${preset.stops[1]})`, color: preset.stops[0] === "#ffffff" ? "#000" : "#fff", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
                       {preset.label}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Brush tools */}
               <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
                 <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
                   {BRUSH_COLORS.map(c => (
@@ -457,7 +597,7 @@ export default function Profile({ userId: propUserId }) {
                     <RotateCcw size={14} />Очистить
                   </button>
                   <button onClick={saveBanner}
-                    style={{ display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                    style={{ display: "flex", alignItems: "center", gap: "6px", background: "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "8px", padding: "7px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
                     <Check size={14} />Сохранить
                   </button>
                 </div>
