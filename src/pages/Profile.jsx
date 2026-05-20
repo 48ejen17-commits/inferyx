@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, orderBy, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, updateDoc, doc, query, where, deleteDoc } from "firebase/firestore";
 import { useAuth, ROLE_COLORS, ROLE_LABELS } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { Edit3, X, Plus, Trash2, Send, MessageCircle, FileText, Smile, RotateCcw, Check } from "lucide-react";
@@ -81,8 +81,8 @@ export default function Profile({ userId: propUserId }) {
   useEffect(() => {
     if (!targetId) return;
     const unsubs = [
-      onSnapshot(query(collection(db, "profile_posts"), where("userId", "==", targetId), orderBy("createdAt", "desc")),
-        snap => setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(query(collection(db, "profile_posts"), where("userId", "==", targetId)),
+        snap => setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => b.createdAt?.localeCompare?.(a.createdAt) || 0))),
       onSnapshot(query(collection(db, "entries"), where("userId", "==", targetId)),
         snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
@@ -181,15 +181,23 @@ export default function Profile({ userId: propUserId }) {
 
   const addPost = async () => {
     if (!newPost.text.trim()) return;
-    await addDoc(collection(db, "profile_posts"), {
-      text: newPost.text.trim(), emoji: newPost.emoji,
-      userId: user.uid, userName: myProfile?.name || "—", userRole: myProfile?.role || "",
-      createdAt: new Date().toISOString(),
-      date: new Date().toLocaleDateString("ru-RU"),
-      time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-    });
-    setNewPost({ text: "", emoji: "" });
-    setShowNewPost(false);
+    try {
+      await addDoc(collection(db, "profile_posts"), {
+        text: newPost.text.trim(),
+        emoji: newPost.emoji,
+        userId: user.uid,
+        userName: myProfile?.name || "—",
+        userRole: myProfile?.role || "",
+        createdAt: new Date().toISOString(),
+        date: new Date().toLocaleDateString("ru-RU"),
+        time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      });
+      setNewPost({ text: "", emoji: "" });
+      setShowNewPost(false);
+    } catch (e) {
+      console.error("addPost error:", e);
+      alert("Ошибка при публикации: " + e.message);
+    }
   };
 
   const deletePost = async (id) => await deleteDoc(doc(db, "profile_posts", id));
