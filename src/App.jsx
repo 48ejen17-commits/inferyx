@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useParams } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import SplashScreen from "./components/SplashScreen";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -23,16 +26,7 @@ function ProfileWrapper() {
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div style={{ minHeight: "100vh", background: "#07070f", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "24px", fontWeight: 800, background: "linear-gradient(135deg, #7c3aed, #db2777)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", marginBottom: "16px" }}>
-          INFERYX
-        </div>
-        <div style={{ color: "#475569", fontSize: "14px" }}>Загрузка...</div>
-      </div>
-    </div>
-  );
+  if (loading) return null;
   return user ? children : <Navigate to="/login" />;
 }
 
@@ -51,20 +45,27 @@ function AppRoutes() {
       <Route path="/team" element={<PrivateRoute><Layout><Team /></Layout></PrivateRoute>} />
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
+      <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><Layout><Profile /></Layout></PrivateRoute>} />
       <Route path="/profile/:userId" element={<PrivateRoute><Layout><ProfileWrapper /></Layout></PrivateRoute>} />
-      <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   return (
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <AppRoutes />
+          <AnimatePresence mode="wait">
+            {showSplash && (
+              <SplashScreen key="splash" onDone={() => setShowSplash(false)} />
+            )}
+          </AnimatePresence>
+          {!showSplash && <AppRoutes />}
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>
