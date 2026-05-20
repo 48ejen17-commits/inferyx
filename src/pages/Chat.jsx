@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, orderBy, query, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { useAuth, ROLE_COLORS, ROLE_LABELS } from "../context/AuthContext";
+import { getOnlineStatus, STATUS_COLOR } from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
 import { Send, Plus, Hash, Lock, Users, X, Search, Check } from "lucide-react";
 
@@ -81,7 +82,7 @@ export default function Chat() {
       time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
     });
     await updateDoc(doc(db, "rooms", activeRoom.id), {
-      lastMessage: text.trim(), lastMessageTime: new Date().toISOString(),
+      lastMessage: text.trim(), lastMessageAt: new Date().toISOString(),
       lastMessageUser: profile?.name || "—",
     });
     setText("");
@@ -94,7 +95,7 @@ export default function Chat() {
       name: newRoom.name.trim(), type: newRoom.type, description: newRoom.description,
       createdBy: user.uid, createdAt: new Date().toISOString(), members,
       memberNames: [profile?.name || "—", ...selectedMembers.map(uid => users.find(u => u.uid === uid)?.name || "—")],
-      lastMessage: "", lastMessageTime: "",
+      lastMessage: "", lastMessageAt: "",
     });
     setActiveRoom({ id: r.id, ...newRoom, members });
     activeRoomRef.current = { id: r.id, ...newRoom, members };
@@ -165,7 +166,14 @@ export default function Chat() {
                   {room.type === "private" ? <Lock size={15} style={{ color: "#f59e0b" }} /> : <Hash size={15} style={{ color: "#7c3aed" }} />}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
-                  <div style={{ color: activeRoom?.id === room.id ? t.text : t.textSecondary, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{room.name}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ color: activeRoom?.id === room.id ? t.text : t.textSecondary, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{room.name}</div>
+                    {room.lastMessageAt && (
+                      <div style={{ color: t.textFaint, fontSize: "10px", flexShrink: 0, marginLeft: "6px" }}>
+                        {new Date(room.lastMessageAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    )}
+                  </div>
                   <div style={{ color: t.textFaint, fontSize: "11px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {room.lastMessage ? `${room.lastMessageUser}: ${room.lastMessage}` : "Нет сообщений"}
                   </div>
@@ -186,7 +194,7 @@ export default function Chat() {
                   <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: `linear-gradient(135deg, ${ROLE_COLORS[u.role]}, ${ROLE_COLORS[u.role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 700, color: "#fff" }}>
                     {u.avatarEmoji || (u.name || "?")[0].toUpperCase()}
                   </div>
-                  <div style={{ position: "absolute", bottom: -1, right: -1, width: "8px", height: "8px", borderRadius: "50%", background: "#10b981", border: `1.5px solid ${t.bg}` }} />
+                  <div style={{ position: "absolute", bottom: -1, right: -1, width: "8px", height: "8px", borderRadius: "50%", background: STATUS_COLOR[getOnlineStatus(u)], border: `1.5px solid ${t.bg}` }} />
                 </div>
                 <span style={{ color: t.textMuted, fontSize: "12px" }}>{u.name}</span>
               </div>

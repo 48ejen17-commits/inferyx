@@ -10,6 +10,19 @@ import {
   CalendarDays, FileText, Sun, Moon, UserCircle, Clipboard
 } from "lucide-react";
 
+// Online = lastActiveAt within 2 minutes OR isOnline flag true and lastActiveAt within 5 min
+export function getOnlineStatus(user) {
+  if (!user?.lastActiveAt) return "offline";
+  const diff = (Date.now() - new Date(user.lastActiveAt).getTime()) / 1000;
+  if (diff < 120) return "online";      // < 2 min → online
+  if (diff < 600) return "away";        // < 10 min → away
+  return "offline";
+}
+
+export const STATUS_COLOR = { online: "#10b981", away: "#f59e0b", offline: "#475569" };
+export const STATUS_ICON  = { online: "🟢", away: "🌙", offline: "⚫" };
+export const STATUS_LABEL = { online: "В сети", away: "Отошёл", offline: "Не в сети" };
+
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Дашборд" },
   { to: "/checklist", icon: CheckSquare, label: "Чек-лист" },
@@ -35,6 +48,48 @@ export default function Layout({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [lastSeen, setLastSeen] = useState(null);
   const notifRef = useRef(null);
+
+  // ── Presence heartbeat ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.uid || !db) return;
+
+    const updatePresence = async (status = "online") => {
+      try {
+        const snap = await import("firebase/firestore").then(m =>
+          m.getDocs(m.query(m.collection(db, "users"), m.where("uid", "==", user.uid)))
+        );
+        if (!snap.empty) {
+          const userDoc = snap.docs[0];
+          await import("firebase/firestore").then(m =>
+            m.updateDoc(m.doc(db, "users", userDoc.id), {
+              lastActiveAt: new Date().toISOString(),
+              isOnline: status === "online",
+            })
+          );
+        }
+      } catch {}
+    };
+
+    // Set online immediately
+    updatePresence("online");
+
+    // Heartbeat every 30s
+    const interval = setInterval(() => updatePresence("online"), 30000);
+
+    // Set offline on tab close/hide
+    const handleOffline = () => updatePresence("offline");
+    window.addEventListener("beforeunload", handleOffline);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") updatePresence("offline");
+      else updatePresence("online");
+    });
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", handleOffline);
+      updatePresence("offline");
+    };
+  }, [user?.uid, db]);
 
   // Live profile
   useEffect(() => {
@@ -308,7 +363,7 @@ export default function Layout({ children }) {
             onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
             <div style={{ position: "relative" }}>
                 <Avatar size={34} fontSize={14} radius="10px" />
-                <div style={{ position: "absolute", bottom: -2, right: -2, width: "10px", height: "10px", borderRadius: "50%", background: "#10b981", border: `2px solid ${t.bg}` }} />
+                <div style={{ position: "absolute", bottom: -2, right: -2, width: "10px", height: "10px", borderRadius: "50%", background: STATUS_COLOR[getOnlineStatus(currentProfile)], border: `2px solid ${t.bg}` }} />
               </div>
             <div>
               <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{currentProfile?.name || "—"}</div>

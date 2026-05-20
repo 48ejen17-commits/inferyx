@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, query, where, getDocs } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 import { useAuth, ROLES, ROLE_LABELS, ROLE_LABELS_DISPLAY, ROLE_COLORS } from "../context/AuthContext";
+import { getOnlineStatus, STATUS_COLOR, STATUS_LABEL } from "../components/Layout";
 import { useTheme } from "../context/ThemeContext";
 import { Plus, X, Users, Shield, TrendingUp, Activity, Lock, Trash2, AlertTriangle } from "lucide-react";
 
@@ -291,13 +292,17 @@ export default function Team() {
                       onClick={() => setSelected(member)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                       style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "14px", padding: "18px", cursor: "pointer", position: "relative" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
-                        <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: `linear-gradient(135deg, ${ROLE_COLORS[role]}, ${ROLE_COLORS[role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: member.avatarEmoji ? "20px" : "16px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                          {member.avatarEmoji || (member.name || "?")[0].toUpperCase()}
+                        <div style={{ position: "relative", flexShrink: 0 }}>
+                          <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: `linear-gradient(135deg, ${ROLE_COLORS[role]}, ${ROLE_COLORS[role]}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: member.avatarEmoji ? "20px" : "16px", fontWeight: 700, color: "#fff" }}>
+                            {member.avatarEmoji || (member.name || "?")[0].toUpperCase()}
+                          </div>
+                          <div style={{ position: "absolute", bottom: -3, right: -3, width: "12px", height: "12px", borderRadius: "50%", background: STATUS_COLOR[getOnlineStatus(member)], border: `2px solid ${t.bgCard}` }} />
                         </div>
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ color: t.text, fontWeight: 600, fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{member.name}</div>
-                          <div style={{ color: ROLE_COLORS[role], fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                            {ROLE_LABELS_DISPLAY[role] || role}
+                          <div style={{ display: "flex", alignItems: "center", gap: "5px", flexWrap: "wrap" }}>
+                            <span style={{ color: ROLE_COLORS[role], fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.5px" }}>{ROLE_LABELS_DISPLAY[role] || role}</span>
+                            <span style={{ color: STATUS_COLOR[getOnlineStatus(member)], fontSize: "11px" }}>· {STATUS_LABEL[getOnlineStatus(member)]}</span>
                           </div>
                         </div>
                         {role === ROLES.OWNER && <Lock size={12} style={{ color: ROLE_COLORS[role], flexShrink: 0 }} />}
