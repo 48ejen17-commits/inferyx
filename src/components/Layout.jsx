@@ -7,16 +7,16 @@ import { collection, onSnapshot } from "firebase/firestore";
 import {
   LayoutDashboard, TrendingUp, CheckSquare, Users, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight, MessageSquare,
-  CalendarDays, FileText, Sun, Moon, UserCircle
+  CalendarDays, FileText, Sun, Moon, UserCircle, CheckSquare2
 } from "lucide-react";
 
 const NAV = [
   { to: "/", icon: LayoutDashboard, label: "Дашборд" },
-  { to: "/traffic", icon: TrendingUp, label: "Трафик" },
   { to: "/checklist", icon: CheckSquare, label: "Чек-лист" },
   { to: "/chat", icon: MessageSquare, label: "Чаты" },
   { to: "/schedule", icon: CalendarDays, label: "График" },
   { to: "/content", icon: FileText, label: "Контент" },
+  { to: "/tasks", icon: CheckSquare2, label: "Задачи" },
   { to: "/models", icon: UserCircle, label: "Модели" },
   { to: "/team", icon: Users, label: "Команда" },
   { to: "/analytics", icon: BarChart3, label: "Аналитика" },
