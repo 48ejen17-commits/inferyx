@@ -3,11 +3,11 @@ import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth, ROLE_LABELS, ROLE_COLORS } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc, setDoc, getDoc, addDoc } from "firebase/firestore";
 import {
   LayoutDashboard, TrendingUp, CheckSquare, Users, BarChart3,
   Settings, LogOut, Menu, X, Bell, ChevronRight, MessageSquare,
-  CalendarDays, FileText, Sun, Moon, UserCircle, Clipboard
+  CalendarDays, FileText, Sun, Moon, UserCircle, Clipboard, Plus
 } from "lucide-react";
 
 const NAV = [
@@ -28,6 +28,49 @@ export default function Layout({ children }) {
   const { mode, toggle, theme } = useTheme();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
+
+  // ── Quick-add entry form ──────────────────────────────────────────────────
+  const [showAddEntry, setShowAddEntry] = useState(false);
+  const [entryModels, setEntryModels] = useState([]);
+  const [entryForm, setEntryForm] = useState({ platform: "Reddit", model: "", note: "", traffic: "" });
+  const [entrySaving, setEntrySaving] = useState(false);
+
+  const PLATFORM_ICONS = {
+    "Reddit": "🟠", "Twitter/X": "🐦", "TikTok": "🎵", "Instagram": "📸",
+    "Telegram": "✈️", "Discord": "💬", "Facebook": "📘", "YouTube": "▶️",
+    "OnlyFans": "🔞", "Snapchat": "👻",
+  };
+  const PLATFORMS = Object.keys(PLATFORM_ICONS);
+
+  useEffect(() => {
+    if (!db) return;
+    return onSnapshot(collection(db, "models"), snap =>
+      setEntryModels(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(m => m.status !== "inactive"))
+    );
+  }, [db]);
+
+  const saveEntry = async () => {
+    if (!entryForm.model || !entryForm.note.trim()) return;
+    setEntrySaving(true);
+    try {
+      await addDoc(collection(db, "entries"), {
+        platform: entryForm.platform,
+        platformIcon: PLATFORM_ICONS[entryForm.platform] || "📌",
+        model: entryForm.model,
+        note: entryForm.note,
+        traffic: Number(entryForm.traffic) || 0,
+        userId: user.uid,
+        adminName: profile?.name || "—",
+        admin: profile?.name || "—",
+        createdAt: new Date().toISOString(),
+        date: new Date().toLocaleDateString("ru-RU"),
+        time: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      });
+      setEntryForm({ platform: "Reddit", model: "", note: "", traffic: "" });
+      setShowAddEntry(false);
+    } catch (e) { console.error(e); }
+    setEntrySaving(false);
+  };
   const [mobileOpen, setMobileOpen] = useState(false);
   const [liveProfile, setLiveProfile] = useState(null);
   const [showNotif, setShowNotif] = useState(false);
@@ -323,6 +366,97 @@ export default function Layout({ children }) {
           {children}
         </motion.div>
       </div>
+
+      {/* ── FAB: добавить запись ── */}
+      <motion.button
+        onClick={() => setShowAddEntry(true)}
+        whileHover={{ scale: 1.08 }} whileTap={{ scale: 0.95 }}
+        style={{
+          position: "fixed", bottom: "28px", right: "28px", zIndex: 500,
+          width: "52px", height: "52px", borderRadius: "50%",
+          background: "linear-gradient(135deg, #7c3aed, #db2777)",
+          border: "none", cursor: "pointer", color: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          boxShadow: "0 4px 20px rgba(124,58,237,0.5)",
+        }}>
+        <Plus size={22} />
+      </motion.button>
+
+      {/* ── Modal: добавить запись ── */}
+      <AnimatePresence>
+        {showAddEntry && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setShowAddEntry(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary || t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "28px", width: "100%", maxWidth: "460px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "22px" }}>
+                <h3 style={{ color: t.text, fontSize: "17px", fontWeight: 700 }}>➕ Новая запись</h3>
+                <button onClick={() => setShowAddEntry(false)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", padding: "4px" }}><X size={18} /></button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Platform */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "12px", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Платформа</label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {PLATFORMS.map(p => (
+                      <button key={p} onClick={() => setEntryForm(f => ({ ...f, platform: p }))}
+                        style={{
+                          padding: "7px 12px", borderRadius: "8px", fontSize: "13px", fontWeight: 500, cursor: "pointer",
+                          border: `1px solid ${entryForm.platform === p ? "#7c3aed" : t.border}`,
+                          background: entryForm.platform === p ? "rgba(124,58,237,0.15)" : t.bgCardHover || t.bgCard,
+                          color: entryForm.platform === p ? "#a78bfa" : t.textMuted,
+                        }}>
+                        {PLATFORM_ICONS[p]} {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Model */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "12px", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Модель</label>
+                  <select value={entryForm.model} onChange={e => setEntryForm(f => ({ ...f, model: e.target.value }))}
+                    style={{ background: t.bgInput || t.bgCard, color: t.text, border: `1px solid ${entryForm.model ? "#7c3aed" : t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", width: "100%", fontFamily: "inherit" }}>
+                    <option value="">Выбери модель...</option>
+                    {entryModels.map(m => <option key={m.id} value={m.name}>{m.emoji || ""} {m.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "12px", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Заметка</label>
+                  <input placeholder="Что сделано..." value={entryForm.note} onChange={e => setEntryForm(f => ({ ...f, note: e.target.value }))}
+                    onKeyDown={e => e.key === "Enter" && saveEntry()}
+                    style={{ background: t.bgInput || t.bgCard, color: t.text, border: `1px solid ${entryForm.note ? "#7c3aed" : t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", width: "100%", fontFamily: "inherit" }} />
+                </div>
+
+                {/* Traffic */}
+                <div>
+                  <label style={{ color: t.textMuted, fontSize: "12px", fontWeight: 600, display: "block", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Трафик (необязательно)</label>
+                  <input type="number" placeholder="0" value={entryForm.traffic} onChange={e => setEntryForm(f => ({ ...f, traffic: e.target.value }))}
+                    style={{ background: t.bgInput || t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", width: "100%", fontFamily: "inherit" }} />
+                </div>
+
+                <motion.button onClick={saveEntry} disabled={entrySaving || !entryForm.model || !entryForm.note.trim()}
+                  whileTap={{ scale: 0.97 }}
+                  style={{
+                    marginTop: "4px", width: "100%",
+                    background: (!entryForm.model || !entryForm.note.trim()) ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg, #7c3aed, #db2777)",
+                    color: "#fff", border: "none", borderRadius: "12px", padding: "13px",
+                    fontSize: "15px", fontWeight: 700, cursor: (!entryForm.model || !entryForm.note.trim()) ? "not-allowed" : "pointer",
+                    transition: "all 0.2s",
+                  }}>
+                  {entrySaving ? "Сохранение..." : "Сохранить запись"}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
