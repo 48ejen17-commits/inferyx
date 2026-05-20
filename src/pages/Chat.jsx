@@ -26,16 +26,36 @@ export default function Chat() {
   const [memberSearch, setMemberSearch] = useState("");
   const messagesEndRef = useRef(null);
 
+  const activeRoomRef = useRef(null);
+
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, "rooms"), snap => {
         const r = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const accessible = r.filter(room =>
-          room.type === "public" || room.createdBy === user.uid ||
-          (room.members && room.members.includes(user.uid))
-        );
+        const accessible = r
+          .filter(room =>
+            room.type === "public" || room.createdBy === user.uid ||
+            (room.members && room.members.includes(user.uid))
+          )
+          .sort((a, b) => {
+            // Sort by last message time descending
+            const ta = a.lastMessageAt || a.createdAt || "";
+            const tb = b.lastMessageAt || b.createdAt || "";
+            return tb.localeCompare(ta);
+          });
         setRooms(accessible);
-        if (!activeRoom && accessible.length > 0) setActiveRoom(accessible[0]);
+        // Only auto-select first room if nothing is selected yet
+        if (!activeRoomRef.current && accessible.length > 0) {
+          setActiveRoom(accessible[0]);
+          activeRoomRef.current = accessible[0];
+        } else if (activeRoomRef.current) {
+          // Keep active room data fresh (e.g. lastMessage updated) without switching
+          const updated = accessible.find(r => r.id === activeRoomRef.current.id);
+          if (updated) {
+            setActiveRoom(updated);
+            activeRoomRef.current = updated;
+          }
+        }
       }),
       onSnapshot(collection(db, "users"), snap => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
@@ -77,6 +97,7 @@ export default function Chat() {
       lastMessage: "", lastMessageTime: "",
     });
     setActiveRoom({ id: r.id, ...newRoom, members });
+    activeRoomRef.current = { id: r.id, ...newRoom, members };
     setNewRoom({ name: "", type: "public", description: "" });
     setSelectedMembers([]); setMemberSearch(""); setShowNewRoom(false);
   };
@@ -137,7 +158,7 @@ export default function Chat() {
               Нет чатов.<br />Нажми + чтобы создать!
             </div>
           ) : filteredRooms.map(room => (
-            <motion.button key={room.id} onClick={() => setActiveRoom(room)} whileHover={{ x: 2 }}
+            <motion.button key={room.id} onClick={() => { setActiveRoom(room); activeRoomRef.current = room; }} whileHover={{ x: 2 }}
               style={{ width: "100%", background: activeRoom?.id === room.id ? "rgba(124,58,237,0.15)" : "transparent", border: "none", borderRadius: "10px", padding: "10px 12px", cursor: "pointer", textAlign: "left", marginBottom: "2px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: activeRoom?.id === room.id ? "rgba(124,58,237,0.3)" : t.bgCardHover, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
