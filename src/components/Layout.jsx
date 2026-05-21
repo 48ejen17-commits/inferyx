@@ -71,308 +71,189 @@ const buildWheel = () => {
   return wheel;
 };
 
-function SecretRoulette({ users, t }) {
-  const [open, setOpen]         = useState(false);
-  const [hovered, setHovered]   = useState(false);
-  const [wheel]                  = useState(() => buildWheel());
-  const [spinning, setSpinning]  = useState(false);
-  const [result, setResult]      = useState(null);
-  const [bet, setBet]            = useState(100);
-  const [balance, setBalance]    = useState(1000);
-  const [history, setHistory]    = useState([]);
-  const canvasRef                = useRef(null);
-  const spinRef                  = useRef({ angle: 0, velocity: 0, targetIdx: 0 });
-  const rafRef                   = useRef(null);
-  const confRef                  = useRef([]);
-  const confCanvasRef            = useRef(null);
+// ── CASINO SLOTS ──────────────────────────────────────────────────────────────
+const SYMBOLS = [
+  { id: "seven",   emoji: "7️⃣",  label: "SEVEN",  color: "#ef4444", weight: 2  },
+  { id: "diamond", emoji: "💎",  label: "DIAMOND", color: "#0ea5e9", weight: 4  },
+  { id: "crown",   emoji: "👑",  label: "CROWN",   color: "#f59e0b", weight: 5  },
+  { id: "star",    emoji: "⭐",  label: "STAR",    color: "#a78bfa", weight: 8  },
+  { id: "cherry",  emoji: "🍒",  label: "CHERRY",  color: "#db2877", weight: 10 },
+  { id: "lemon",   emoji: "🍋",  label: "LEMON",   color: "#84cc16", weight: 12 },
+  { id: "grape",   emoji: "🍇",  label: "GRAPE",   color: "#8b5cf6", weight: 13 },
+  { id: "melon",   emoji: "🍉",  label: "MELON",   color: "#10b981", weight: 14 },
+  { id: "bell",    emoji: "🔔",  label: "BELL",    color: "#f97316", weight: 15 },
+  { id: "skull",   emoji: "💀",  label: "SKULL",   color: "#475569", weight: 17 },
+];
+
+const PAYOUTS = {
+  seven:   { x3: 100, x2: 10 },
+  diamond: { x3: 50,  x2: 7  },
+  crown:   { x3: 30,  x2: 5  },
+  star:    { x3: 20,  x2: 4  },
+  cherry:  { x3: 15,  x2: 3  },
+  lemon:   { x3: 12,  x2: 2  },
+  grape:   { x3: 10,  x2: 0  },
+  melon:   { x3: 8,   x2: 0  },
+  bell:    { x3: 6,   x2: 0  },
+  skull:   { x3: 0,   x2: 0  },
+};
+
+// Build weighted symbol pool
+const POOL = [];
+SYMBOLS.forEach(s => { for (let i = 0; i < s.weight; i++) POOL.push(s); });
+
+const randSym = () => POOL[Math.floor(Math.random() * POOL.length)];
+
+const calcPayout = (reels, bet) => {
+  const ids = reels.map(r => r.id);
+  if (ids[0] === ids[1] && ids[1] === ids[2]) {
+    const mult = PAYOUTS[ids[0]]?.x3 || 0;
+    return { mult, type: mult > 0 ? "triple" : "lose", sym: reels[0] };
+  }
+  if (ids[0] === ids[1] || ids[1] === ids[2]) {
+    const matchId = ids[0] === ids[1] ? ids[0] : ids[1];
+    const mult = PAYOUTS[matchId]?.x2 || 0;
+    return { mult, type: mult > 0 ? "pair" : "lose", sym: SYMBOLS.find(s => s.id === matchId) };
+  }
+  return { mult: 0, type: "lose", sym: null };
+};
+
+function SecretSlots({ t }) {
+  const [open, setOpen]       = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [spinning, setSpinning] = useState(false);
+  const [reels, setReels]     = useState([SYMBOLS[8], SYMBOLS[4], SYMBOLS[6]]);
+  const [result, setResult]   = useState(null);
+  const [bet, setBet]         = useState(100);
+  const [balance, setBalance] = useState(1000);
+  const [history, setHistory] = useState([]);
+  const [flash, setFlash]     = useState(null); // "win"|"jackpot"|"lose"
+  const [raining, setRaining] = useState(false);
+
+  // Reel animation state — each reel has its own spinning symbols
+  const [reelDisplays, setReelDisplays] = useState([
+    [SYMBOLS[8], SYMBOLS[4], SYMBOLS[6]],
+    [SYMBOLS[4], SYMBOLS[6], SYMBOLS[8]],
+    [SYMBOLS[6], SYMBOLS[8], SYMBOLS[4]],
+  ]);
+  const [reelSpeeds, setReelSpeeds] = useState([0, 0, 0]);
+  const animRef = useRef(null);
+  const confRef = useRef([]);
+  const confCanvasRef = useRef(null);
   const [confActive, setConfActive] = useState(false);
 
-  // ── Draw wheel ───────────────────────────────────────────────────────────────
-  const drawWheel = (angle) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    const S = 320, cx = S/2, cy = S/2, r = S/2 - 10;
-    ctx.clearRect(0, 0, S, S);
-
-    const seg = (Math.PI * 2) / wheel.length;
-
-    // outer glow
-    const glowGrad = ctx.createRadialGradient(cx, cy, r*0.8, cx, cy, r+12);
-    glowGrad.addColorStop(0, "rgba(124,58,237,0)");
-    glowGrad.addColorStop(1, "rgba(124,58,237,0.2)");
-    ctx.fillStyle = glowGrad;
-    ctx.beginPath(); ctx.arc(cx, cy, r+12, 0, Math.PI*2); ctx.fill();
-
-    wheel.forEach((slot, i) => {
-      const start = angle + i * seg - Math.PI / 2;
-      const end   = start + seg;
-      const mid   = start + seg / 2;
-
-      // segment fill
-      ctx.beginPath(); ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, r, start, end); ctx.closePath();
-      ctx.fillStyle = slot.color; ctx.fill();
-
-      // separator
-      ctx.strokeStyle = "rgba(255,255,255,0.08)";
-      ctx.lineWidth = 1; ctx.stroke();
-
-      // shimmer overlay
-      ctx.beginPath(); ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, r, start, end); ctx.closePath();
-      const sh = ctx.createLinearGradient(
-        cx + Math.cos(mid)*r*0.2, cy + Math.sin(mid)*r*0.2,
-        cx + Math.cos(mid)*r*0.9, cy + Math.sin(mid)*r*0.9
-      );
-      sh.addColorStop(0, "rgba(255,255,255,0.12)");
-      sh.addColorStop(1, "rgba(255,255,255,0)");
-      ctx.fillStyle = sh; ctx.fill();
-
-      // text — only show if segment wide enough
-      if (seg > 0.15) {
-        ctx.save();
-        ctx.translate(cx, cy); ctx.rotate(mid);
-        ctx.textAlign = "right";
-        ctx.font = `bold ${seg < 0.25 ? 9 : 11}px Inter,system-ui,sans-serif`;
-        ctx.fillStyle = slot.textColor;
-        ctx.shadowColor = "rgba(0,0,0,0.8)"; ctx.shadowBlur = 4;
-        ctx.fillText(slot.label, r * 0.88, 4);
-        ctx.restore();
-      }
-    });
-
-    // tick marks on rim
-    ctx.strokeStyle = "rgba(255,255,255,0.15)";
-    ctx.lineWidth = 2;
-    for (let i = 0; i < wheel.length; i++) {
-      const a = angle + i * seg - Math.PI/2;
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(a) * (r-4), cy + Math.sin(a) * (r-4));
-      ctx.lineTo(cx + Math.cos(a) * (r+6), cy + Math.sin(a) * (r+6));
-      ctx.stroke();
-    }
-
-    // outer ring
-    ctx.beginPath(); ctx.arc(cx, cy, r+4, 0, Math.PI*2);
-    ctx.strokeStyle = "rgba(124,58,237,0.5)"; ctx.lineWidth = 3; ctx.stroke();
-
-    // center hub
-    const hubGrad = ctx.createRadialGradient(cx-5, cy-5, 2, cx, cy, 28);
-    hubGrad.addColorStop(0, "#a78bfa"); hubGrad.addColorStop(1, "#4c1d95");
-    ctx.beginPath(); ctx.arc(cx, cy, 28, 0, Math.PI*2);
-    ctx.fillStyle = hubGrad; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 2; ctx.stroke();
-    ctx.font = "18px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.shadowBlur = 0; ctx.fillText("🎰", cx, cy);
-
-    // pointer (arrow at top)
-    const px = cx, py = 6;
-    ctx.save(); ctx.translate(px, py);
-    ctx.beginPath();
-    ctx.moveTo(-14, -4); ctx.lineTo(14, -4);
-    ctx.lineTo(10, 8); ctx.lineTo(0, 22); ctx.lineTo(-10, 8);
-    ctx.closePath();
-    const pg = ctx.createLinearGradient(0,-4,0,22);
-    pg.addColorStop(0, "#fbbf24"); pg.addColorStop(1, "#ef4444");
-    ctx.fillStyle = pg; ctx.fill();
-    ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.restore();
-  };
-
-  useEffect(() => {
-    if (open) setTimeout(() => drawWheel(spinRef.current.angle), 60);
-  }, [open]);
-
-  // ── Spin ──────────────────────────────────────────────────────────────────────
-  const spin = () => {
+  const doSpin = () => {
     if (spinning || bet > balance || bet <= 0) return;
-
-    // Deduct bet immediately
     setBalance(b => b - bet);
     setResult(null);
+    setFlash(null);
     setSpinning(true);
 
-    // Pick winner slot weighted by prob
-    const rand = Math.random() * 100;
-    let cumulative = 0;
-    let winnerSlot = SLOTS[0];
-    for (const slot of SLOTS) {
-      cumulative += slot.prob;
-      if (rand <= cumulative) { winnerSlot = slot; break; }
-    }
+    // Pick final results
+    const finals = [randSym(), randSym(), randSym()];
 
-    // Find a matching index on the wheel
-    const candidates = wheel.reduce((acc, s, i) => s.label === winnerSlot.label ? [...acc, i] : acc, []);
-    const targetIdx  = candidates[Math.floor(Math.random() * candidates.length)];
+    // Generate long strips for each reel
+    const strips = finals.map(final => {
+      const strip = Array.from({ length: 30 }, () => randSym());
+      strip[strip.length - 1] = final;
+      return strip;
+    });
 
-    const seg = (Math.PI * 2) / wheel.length;
-    // We want targetIdx to land at top (angle = -Math.PI/2 + Math.PI/2 = 0 => pointer at top means angle offset = 0)
-    // Current angle + velocity will land at some angle. We set targetAngle so that:
-    // targetAngle + targetIdx * seg - Math.PI/2 ≡ -Math.PI/2 (i.e. slot middle at top)
-    // => targetAngle = -targetIdx * seg
-    const extraSpins    = 8 + Math.floor(Math.random() * 5); // 8-12 full spins
-    const targetFinal   = -targetIdx * seg + extraSpins * Math.PI * 2;
-    const current       = spinRef.current.angle % (Math.PI * 2);
-    const distance      = targetFinal - (spinRef.current.angle);
+    let frameCount = 0;
+    const REEL_FRAMES = [38, 48, 58]; // each reel stops at different time
+    const indexes = [0, 0, 0];
 
-    spinRef.current.targetAngle = spinRef.current.angle + distance + Math.random() * seg * 0.3;
-    spinRef.current.velocity    = 0.35 + Math.random() * 0.1;
-    spinRef.current.winnerSlot  = winnerSlot;
+    const animate = () => {
+      frameCount++;
+      setReelDisplays(prev => {
+        const next = [...prev];
+        for (let r = 0; r < 3; r++) {
+          if (frameCount < REEL_FRAMES[r]) {
+            // Still spinning — cycle through strip rapidly
+            const speed = Math.max(1, Math.floor((REEL_FRAMES[r] - frameCount) / 8));
+            if (frameCount % Math.max(1, Math.floor(speed * 0.4)) === 0) {
+              indexes[r] = (indexes[r] + 1) % strips[r].length;
+            }
+            const i = indexes[r];
+            const strip = strips[r];
+            next[r] = [
+              strip[(i + strip.length - 1) % strip.length],
+              strip[i],
+              strip[(i + 1) % strip.length],
+            ];
+          } else {
+            // Stopped — show final
+            next[r] = [
+              strips[r][strips[r].length - 2] || strips[r][0],
+              finals[r],
+              strips[r][strips[r].length - 3] || strips[r][1],
+            ];
+          }
+        }
+        return next;
+      });
 
-    const totalDist = spinRef.current.targetAngle - spinRef.current.angle;
-    let traveled = 0;
-    let alive = true;
-
-    const loop = () => {
-      if (!alive) return;
-
-      // Ease-out based on distance remaining
-      const remaining = spinRef.current.targetAngle - spinRef.current.angle;
-      if (remaining <= 0 || spinRef.current.velocity < 0.002) {
-        spinRef.current.angle = spinRef.current.targetAngle;
-        drawWheel(spinRef.current.angle);
+      if (frameCount < REEL_FRAMES[2] + 8) {
+        animRef.current = requestAnimationFrame(animate);
+      } else {
+        // All stopped
+        setReels(finals);
         setSpinning(false);
 
-        const won = winnerSlot.mult > 0;
-        const payout = won ? Math.round(bet * winnerSlot.mult) : 0;
+        const res = calcPayout(finals, bet);
+        const payout = Math.round(bet * res.mult);
         setBalance(b => b + payout);
-        setResult({ slot: winnerSlot, payout, bet });
-        setHistory(h => [{ slot: winnerSlot, payout, bet, time: new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}) }, ...h].slice(0, 8));
+        setResult({ ...res, payout, bet });
+        setHistory(h => [{
+          finals, payout, bet, type: res.type,
+          time: new Date().toLocaleTimeString("ru-RU", { hour:"2-digit", minute:"2-digit" })
+        }, ...h].slice(0, 10));
 
-        // ── Result animation on canvas ──────────────────────────────────────
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const ctx = canvas.getContext("2d");
-          const S = 320, cx = S/2, cy = S/2;
-          let frame = 0;
-          const totalFrames = won ? 60 : 40;
-          const isJackpot = winnerSlot.mult >= 10;
-
-          const animLoop = () => {
-            if (frame >= totalFrames) {
-              // Redraw clean wheel at end
-              drawWheel(spinRef.current.angle);
-              return;
-            }
-            frame++;
-            const progress = frame / totalFrames;
-            const eased = Math.sin(progress * Math.PI);
-
-            // Redraw wheel first
-            drawWheel(spinRef.current.angle);
-
-            if (won) {
-              // Gold flash overlay
-              const flashAlpha = eased * (isJackpot ? 0.45 : 0.28);
-              const flashColor = isJackpot ? `rgba(245,158,11,${flashAlpha})` : `rgba(124,58,237,${flashAlpha})`;
-              ctx.fillStyle = flashColor;
-              ctx.beginPath(); ctx.arc(cx, cy, S/2 - 10, 0, Math.PI*2); ctx.fill();
-
-              // Expanding ring
-              const ringR = (S/2 - 10) * (0.3 + eased * 0.7);
-              ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI*2);
-              ctx.strokeStyle = isJackpot ? `rgba(245,158,11,${(1-progress)*0.8})` : `rgba(167,139,250,${(1-progress)*0.8})`;
-              ctx.lineWidth = isJackpot ? 5 : 3; ctx.stroke();
-
-              if (isJackpot) {
-                // Second ring
-                const ringR2 = (S/2 - 10) * (0.3 + eased * 0.5);
-                ctx.beginPath(); ctx.arc(cx, cy, ringR2, 0, Math.PI*2);
-                ctx.strokeStyle = `rgba(255,255,255,${(1-progress)*0.5})`;
-                ctx.lineWidth = 2; ctx.stroke();
-              }
-
-              // Win text
-              const textAlpha = eased;
-              const textScale = 0.5 + eased * 0.5;
-              ctx.save();
-              ctx.translate(cx, cy);
-              ctx.scale(textScale, textScale);
-              ctx.textAlign = "center"; ctx.textBaseline = "middle";
-              ctx.font = `bold ${isJackpot ? 28 : 22}px Inter,system-ui,sans-serif`;
-              ctx.shadowColor = isJackpot ? "#f59e0b" : "#7c3aed";
-              ctx.shadowBlur = 20;
-              ctx.fillStyle = `rgba(255,255,255,${textAlpha})`;
-              ctx.fillText(isJackpot ? "🎊 ДЖЕКПОТ!" : `✨ ×${winnerSlot.mult}`, 0, -18);
-              ctx.font = `bold ${isJackpot ? 22 : 18}px Inter,system-ui,sans-serif`;
-              ctx.fillStyle = isJackpot ? `rgba(245,158,11,${textAlpha})` : `rgba(167,139,250,${textAlpha})`;
-              ctx.fillText(`+${payout} 🪙`, 0, 16);
-              ctx.restore();
-
-            } else {
-              // Red loss flash
-              const lossAlpha = eased * 0.4;
-              ctx.fillStyle = `rgba(239,68,68,${lossAlpha})`;
-              ctx.beginPath(); ctx.arc(cx, cy, S/2-10, 0, Math.PI*2); ctx.fill();
-
-              // Shake-like darkening pulse
-              if (frame % 6 < 3) {
-                ctx.fillStyle = `rgba(0,0,0,0.2)`;
-                ctx.beginPath(); ctx.arc(cx, cy, S/2-10, 0, Math.PI*2); ctx.fill();
-              }
-
-              // Skull + text
-              const textAlpha = eased;
-              ctx.save();
-              ctx.translate(cx, cy);
-              ctx.scale(0.6 + eased*0.4, 0.6 + eased*0.4);
-              ctx.textAlign = "center"; ctx.textBaseline = "middle";
-              ctx.font = "30px serif"; ctx.shadowBlur = 0;
-              ctx.globalAlpha = textAlpha;
-              ctx.fillText("💀", 0, -16);
-              ctx.font = "bold 16px Inter,system-ui,sans-serif";
-              ctx.fillStyle = "#ef4444";
-              ctx.shadowColor = "#ef4444"; ctx.shadowBlur = 10;
-              ctx.fillText(`−${bet} 🪙`, 0, 16);
-              ctx.restore();
-            }
-
-            requestAnimationFrame(animLoop);
-          };
-          requestAnimationFrame(animLoop);
+        if (res.type === "triple" && res.mult >= 30) {
+          setFlash("jackpot");
+          setRaining(true);
+          setTimeout(() => setRaining(false), 4000);
+        } else if (res.type !== "lose") {
+          setFlash("win");
+        } else {
+          setFlash("lose");
         }
 
-        if (won) {
-          confRef.current = Array.from({length: winnerSlot.mult >= 10 ? 160 : 80}, () => ({
-            x: Math.random() * window.innerWidth, y: -20 - Math.random() * 80,
-            vx: (Math.random()-0.5) * (winnerSlot.mult >= 10 ? 10 : 6),
-            vy: 2 + Math.random() * 5, w: 8+Math.random()*8, h: 4+Math.random()*5,
-            color: ["#f59e0b","#7c3aed","#db2877","#10b981","#0ea5e9","#f97316","#fff"][Math.floor(Math.random()*7)],
+        if (res.type !== "lose") {
+          confRef.current = Array.from({ length: res.mult >= 30 ? 200 : 80 }, () => ({
+            x: Math.random() * window.innerWidth,
+            y: -20 - Math.random() * 100,
+            vx: (Math.random() - 0.5) * (res.mult >= 30 ? 12 : 6),
+            vy: 2 + Math.random() * 5,
+            w: 6 + Math.random() * 10, h: 4 + Math.random() * 6,
+            color: ["#f59e0b","#7c3aed","#db2877","#10b981","#0ea5e9","#f97316","#fff","#fbbf24"][Math.floor(Math.random()*8)],
             rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.2, opacity: 1,
           }));
           setConfActive(true);
-          setTimeout(() => setConfActive(false), winnerSlot.mult >= 10 ? 5000 : 3000);
+          setTimeout(() => setConfActive(false), res.mult >= 30 ? 5000 : 2500);
         }
-        return;
-      }
 
-      // Decelerate smoothly
-      const progress = 1 - (remaining / totalDist);
-      const ease = 1 - Math.pow(progress, 2);
-      spinRef.current.velocity = Math.max(0.003, 0.35 * ease * 0.5 + spinRef.current.velocity * 0.97);
-      spinRef.current.angle += spinRef.current.velocity;
-      drawWheel(spinRef.current.angle);
-      rafRef.current = requestAnimationFrame(loop);
+        setTimeout(() => setFlash(null), 2000);
+      }
     };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => { alive = false; };
+    animRef.current = requestAnimationFrame(animate);
   };
 
-  // ── Confetti ─────────────────────────────────────────────────────────────────
+  // Confetti canvas
   useEffect(() => {
     if (!confActive) return;
     const canvas = confCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
     let alive = true;
     const loop = () => {
       if (!alive) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0,0,canvas.width,canvas.height);
       confRef.current.forEach(p => {
         p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.rot+=p.rotV;
-        if (p.y > canvas.height * 0.8) p.opacity -= 0.02;
+        if (p.y > canvas.height*0.8) p.opacity -= 0.02;
         ctx.save(); ctx.globalAlpha = Math.max(0,p.opacity);
         ctx.translate(p.x,p.y); ctx.rotate(p.rot);
         ctx.fillStyle = p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
@@ -386,176 +267,318 @@ function SecretRoulette({ users, t }) {
   }, [confActive]);
 
   const canSpin = !spinning && bet > 0 && bet <= balance;
-  const bg = "linear-gradient(135deg, #07050f, #120a28)";
-  const cardBg = "rgba(255,255,255,0.04)";
-  const border = "rgba(124,58,237,0.25)";
+
+  // Flash overlay colors
+  const flashStyle = flash === "jackpot"
+    ? { background: "rgba(245,158,11,0.18)", boxShadow: "inset 0 0 60px rgba(245,158,11,0.3)" }
+    : flash === "win"
+    ? { background: "rgba(124,58,237,0.12)", boxShadow: "inset 0 0 40px rgba(124,58,237,0.2)" }
+    : flash === "lose"
+    ? { background: "rgba(239,68,68,0.10)", boxShadow: "inset 0 0 40px rgba(239,68,68,0.15)" }
+    : {};
 
   return (
     <>
       {confActive && <canvas ref={confCanvasRef} style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:9999 }} />}
 
+      {/* Raining symbols on jackpot */}
+      {raining && (
+        <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:9998, overflow:"hidden" }}>
+          {Array.from({length:20}).map((_,i) => (
+            <div key={i} style={{
+              position:"absolute", top:"-60px",
+              left: `${Math.random()*100}%`,
+              fontSize: `${24+Math.random()*20}px`,
+              animation: `fall ${1+Math.random()*2}s linear ${Math.random()*2}s forwards`,
+              opacity: 0.8,
+            }}>
+              {SYMBOLS[Math.floor(Math.random()*5)].emoji}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* CSS for falling animation */}
+      <style>{`
+        @keyframes fall {
+          0% { transform: translateY(0) rotate(0deg); opacity: 0.8; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes reelBounce {
+          0%,100% { transform: scaleY(1); }
+          50% { transform: scaleY(1.04); }
+        }
+        @keyframes pulse-gold {
+          0%,100% { box-shadow: 0 0 20px rgba(245,158,11,0.4), inset 0 0 20px rgba(245,158,11,0.1); }
+          50% { box-shadow: 0 0 50px rgba(245,158,11,0.8), inset 0 0 40px rgba(245,158,11,0.2); }
+        }
+        @keyframes shake {
+          0%,100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+        @keyframes glow-win {
+          0%,100% { text-shadow: 0 0 10px currentColor; }
+          50% { text-shadow: 0 0 30px currentColor, 0 0 60px currentColor; }
+        }
+      `}</style>
+
       {/* Secret trigger */}
       <div
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        onClick={() => { setOpen(true); setResult(null); }}
+        onClick={() => { setOpen(true); setResult(null); setFlash(null); }}
         style={{
           position:"fixed", right:0, top:"50%", transform:"translateY(-50%)",
           width: hovered ? "44px" : "6px", height:"80px",
           borderRadius:"12px 0 0 12px",
-          background: hovered ? "linear-gradient(135deg,#7c3aed,#db2877)" : "rgba(124,58,237,0.2)",
+          background: hovered ? "linear-gradient(135deg,#f59e0b,#ef4444)" : "rgba(245,158,11,0.25)",
           cursor:"pointer", zIndex:500,
           display:"flex", alignItems:"center", justifyContent:"center",
           transition:"all 0.25s cubic-bezier(0.34,1.56,0.64,1)",
-          boxShadow: hovered ? "0 0 24px rgba(124,58,237,0.5)" : "none",
+          boxShadow: hovered ? "0 0 24px rgba(245,158,11,0.6)" : "none",
           overflow:"hidden",
         }}>
         {hovered && <span style={{ fontSize:"22px", userSelect:"none" }}>🎰</span>}
       </div>
 
-      {/* Casino Modal */}
+      {/* Modal */}
       <AnimatePresence>
         {open && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
             onClick={() => !spinning && setOpen(false)}
-            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
-            <motion.div initial={{ scale:0.88, opacity:0, y:20 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.88, opacity:0, y:20 }}
-              transition={{ type:"spring", stiffness:280, damping:24 }}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
+            <motion.div initial={{ scale:0.85, opacity:0, y:30 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.85, opacity:0, y:30 }}
+              transition={{ type:"spring", stiffness:260, damping:22 }}
               onClick={e => e.stopPropagation()}
-              style={{ background:bg, border:"1px solid rgba(124,58,237,0.3)", borderRadius:"28px", padding:"28px 32px", width:"100%", maxWidth:"740px", boxShadow:"0 40px 100px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+              style={{
+                background:"linear-gradient(160deg,#09050f,#140a2a,#09050f)",
+                border:"1px solid rgba(245,158,11,0.25)",
+                borderRadius:"28px", padding:"28px 28px 24px",
+                width:"100%", maxWidth:"680px",
+                boxShadow:"0 40px 120px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06)",
+                transition:"all 0.3s",
+                animation: flash === "jackpot" ? "pulse-gold 0.5s ease-in-out 4" : flash === "shake" ? "shake 0.3s" : "none",
+                ...flashStyle,
+              }}>
 
               {/* Header */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"24px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"22px" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                  <div style={{ width:"44px", height:"44px", borderRadius:"14px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"22px", boxShadow:"0 4px 14px rgba(245,158,11,0.4)" }}>🎰</div>
+                  <div style={{
+                    width:"48px", height:"48px", borderRadius:"14px",
+                    background:"linear-gradient(135deg,#f59e0b,#ef4444)",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:"24px", boxShadow:"0 4px 20px rgba(245,158,11,0.5)",
+                    animation: spinning ? "reelBounce 0.3s infinite" : "none",
+                  }}>🎰</div>
                   <div>
-                    <div style={{ color:"#fff", fontSize:"20px", fontWeight:800, letterSpacing:"0.5px" }}>CASINO</div>
-                    <div style={{ color:"rgba(167,139,250,0.7)", fontSize:"12px" }}>Исключительно для развлечения</div>
+                    <div style={{ color:"#fff", fontSize:"22px", fontWeight:900, letterSpacing:"3px", textShadow:"0 0 20px rgba(245,158,11,0.5)" }}>SLOTS</div>
+                    <div style={{ color:"rgba(245,158,11,0.5)", fontSize:"11px", letterSpacing:"1px" }}>КОМАНДА CASINO · ТОЛЬКО ДЛЯ РАЗВЛЕЧЕНИЯ</div>
                   </div>
                 </div>
-                {/* Balance */}
-                <div style={{ display:"flex", alignItems:"center", gap:"16px" }}>
-                  <div style={{ background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.25)", borderRadius:"12px", padding:"8px 16px", textAlign:"center" }}>
-                    <div style={{ color:"rgba(255,255,255,0.4)", fontSize:"10px", fontWeight:600, textTransform:"uppercase" }}>Баланс</div>
-                    <div style={{ color:"#f59e0b", fontSize:"20px", fontWeight:800 }}>🪙 {balance.toLocaleString()}</div>
+                <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"14px", padding:"8px 18px", textAlign:"center" }}>
+                    <div style={{ color:"rgba(255,255,255,0.3)", fontSize:"9px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px" }}>БАЛАНС</div>
+                    <div style={{ color:"#f59e0b", fontSize:"22px", fontWeight:900, textShadow:"0 0 10px rgba(245,158,11,0.5)" }}>🪙 {balance.toLocaleString()}</div>
                   </div>
-                  <button onClick={() => !spinning && setOpen(false)} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.1)", color:"rgba(255,255,255,0.4)", borderRadius:"10px", width:"36px", height:"36px", cursor:"pointer", fontSize:"18px", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+                  <button onClick={() => !spinning && setOpen(false)}
+                    style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.3)", borderRadius:"10px", width:"36px", height:"36px", cursor:"pointer", fontSize:"20px", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
                 </div>
               </div>
 
-              <div style={{ display:"grid", gridTemplateColumns:"340px 1fr", gap:"24px" }}>
+              {/* Main area */}
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 220px", gap:"20px" }}>
+                <div>
+                  {/* Slot machine body */}
+                  <div style={{
+                    background:"linear-gradient(180deg,#1a0f2e,#0f0720)",
+                    border:"2px solid rgba(245,158,11,0.3)",
+                    borderRadius:"20px", padding:"20px 16px",
+                    boxShadow:"inset 0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(124,58,237,0.1)",
+                    marginBottom:"16px",
+                    animation: flash === "lose" ? "shake 0.4s ease" : "none",
+                  }}>
+                    {/* WIN line indicator */}
+                    <div style={{ display:"flex", justifyContent:"center", marginBottom:"10px" }}>
+                      <div style={{ background: flash === "jackpot" ? "rgba(245,158,11,0.2)" : flash === "win" ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.04)", border:`1px solid ${flash === "jackpot" ? "rgba(245,158,11,0.5)" : flash === "win" ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius:"20px", padding:"3px 16px", fontSize:"11px", fontWeight:700, letterSpacing:"1px", color: flash === "jackpot" ? "#f59e0b" : flash === "win" ? "#a78bfa" : "rgba(255,255,255,0.2)" }}>
+                        {flash === "jackpot" ? "✨ JACKPOT ✨" : flash === "win" ? "▶ WIN LINE ◀" : "— WIN LINE —"}
+                      </div>
+                    </div>
 
-                {/* Wheel */}
-                <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px" }}>
-                  <canvas ref={canvasRef} width={320} height={320}
-                    style={{ filter: spinning ? "drop-shadow(0 0 30px rgba(124,58,237,0.7))" : "drop-shadow(0 8px 24px rgba(0,0,0,0.5))", transition:"filter 0.3s", maxWidth:"100%" }} />
+                    {/* Reels */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"8px", position:"relative" }}>
+                      {/* Win line highlight */}
+                      <div style={{
+                        position:"absolute", top:"50%", left:"-8px", right:"-8px",
+                        height:"2px", transform:"translateY(-50%)",
+                        background: flash === "jackpot" ? "rgba(245,158,11,0.6)" : flash === "win" ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.06)",
+                        zIndex:10, pointerEvents:"none",
+                        transition:"background 0.3s",
+                      }} />
 
-                  {/* Bet controls */}
-                  <div style={{ width:"100%", background:cardBg, border:`1px solid ${border}`, borderRadius:"14px", padding:"14px 16px" }}>
-                    <div style={{ color:"rgba(255,255,255,0.35)", fontSize:"11px", fontWeight:600, textTransform:"uppercase", marginBottom:"8px", letterSpacing:"0.5px" }}>Ставка</div>
-                    <div style={{ display:"flex", gap:"6px", marginBottom:"10px", flexWrap:"wrap" }}>
-                      {[50, 100, 250, 500, 1000].map(v => (
+                      {reelDisplays.map((reel, ri) => (
+                        <div key={ri} style={{
+                          background:"linear-gradient(180deg,#06030f,#0d0820,#06030f)",
+                          border:`1px solid ${spinning && ri === [0,1,2].find(i => frameRef => true) ? "rgba(245,158,11,0.4)" : "rgba(255,255,255,0.06)"}`,
+                          borderRadius:"14px",
+                          overflow:"hidden",
+                          height:"210px",
+                          display:"flex", flexDirection:"column",
+                          boxShadow:"inset 0 0 20px rgba(0,0,0,0.6)",
+                          position:"relative",
+                        }}>
+                          {/* Top fade */}
+                          <div style={{ position:"absolute", top:0, left:0, right:0, height:"50px", background:"linear-gradient(180deg,rgba(6,3,15,0.95),transparent)", zIndex:2, pointerEvents:"none" }} />
+                          {/* Bottom fade */}
+                          <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"50px", background:"linear-gradient(0deg,rgba(6,3,15,0.95),transparent)", zIndex:2, pointerEvents:"none" }} />
+
+                          {reel.map((sym, si) => (
+                            <div key={si} style={{
+                              flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+                              flexDirection:"column",
+                              borderBottom: si < reel.length-1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                              background: si === 1 && !spinning && result ? `${result.sym?.color || sym.color}08` : "transparent",
+                              transition:"background 0.3s",
+                            }}>
+                              <div style={{
+                                fontSize:"40px", lineHeight:1,
+                                filter: si === 1 && !spinning && result?.type !== "lose" && result?.sym?.id === sym.id
+                                  ? `drop-shadow(0 0 12px ${sym.color})`
+                                  : si === 1 ? "none" : "brightness(0.4)",
+                                transition:"all 0.3s",
+                                animation: si === 1 && !spinning && result?.type === "triple" && result?.sym?.id === sym.id
+                                  ? "glow-win 0.8s ease-in-out infinite" : "none",
+                              }}>
+                                {sym.emoji}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bet + Spin */}
+                  <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
+                    {/* Bet chips */}
+                    <div style={{ display:"flex", gap:"5px", flex:1, flexWrap:"wrap" }}>
+                      {[25, 50, 100, 250, 500].map(v => (
                         <button key={v} onClick={() => setBet(Math.min(v, balance))}
-                          style={{ flex:1, minWidth:"44px", padding:"6px 4px", borderRadius:"8px", border:`1px solid ${bet===v ? "rgba(124,58,237,0.6)" : "rgba(255,255,255,0.08)"}`, background: bet===v ? "rgba(124,58,237,0.2)" : "rgba(255,255,255,0.04)", color: bet===v ? "#a78bfa" : "rgba(255,255,255,0.4)", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
+                          style={{
+                            flex:1, minWidth:"42px", padding:"7px 4px",
+                            borderRadius:"10px",
+                            border:`2px solid ${bet===v ? "rgba(245,158,11,0.6)" : "rgba(255,255,255,0.06)"}`,
+                            background: bet===v ? "linear-gradient(135deg,rgba(245,158,11,0.2),rgba(239,68,68,0.15))" : "rgba(255,255,255,0.03)",
+                            color: bet===v ? "#f59e0b" : "rgba(255,255,255,0.3)",
+                            fontSize:"12px", fontWeight:800, cursor:"pointer",
+                            transition:"all 0.15s",
+                            boxShadow: bet===v ? "0 0 10px rgba(245,158,11,0.2)" : "none",
+                          }}>
                           {v}
                         </button>
                       ))}
                     </div>
-                    <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-                      <button onClick={() => setBet(Math.max(10, bet-50))} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", color:"#fff", borderRadius:"8px", width:"32px", height:"32px", cursor:"pointer", fontSize:"16px" }}>−</button>
-                      <div style={{ flex:1, background:"rgba(0,0,0,0.3)", borderRadius:"8px", padding:"6px 12px", textAlign:"center", color:"#f59e0b", fontSize:"16px", fontWeight:800 }}>🪙 {bet}</div>
-                      <button onClick={() => setBet(Math.min(balance, bet+50))} style={{ background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.08)", color:"#fff", borderRadius:"8px", width:"32px", height:"32px", cursor:"pointer", fontSize:"16px" }}>+</button>
-                      <button onClick={() => setBet(balance)} style={{ background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.25)", color:"#f59e0b", borderRadius:"8px", padding:"6px 10px", cursor:"pointer", fontSize:"11px", fontWeight:700 }}>MAX</button>
-                    </div>
-                  </div>
 
-                  {/* Spin button */}
-                  <motion.button onClick={spin} disabled={!canSpin}
-                    whileHover={canSpin ? { scale:1.04 } : {}} whileTap={canSpin ? { scale:0.97 } : {}}
-                    style={{ width:"100%", padding:"15px", borderRadius:"14px", border:"none", cursor: canSpin ? "pointer" : "not-allowed", background: spinning ? "rgba(124,58,237,0.3)" : canSpin ? "linear-gradient(135deg,#7c3aed,#db2877)" : "rgba(255,255,255,0.05)", color:"#fff", fontSize:"18px", fontWeight:800, letterSpacing:"1px", boxShadow: canSpin && !spinning ? "0 6px 24px rgba(124,58,237,0.5)" : "none", transition:"all 0.2s" }}>
-                    {spinning ? "⏳ Крутится..." : balance === 0 ? "Нет монет 💸" : "🎰 КРУТИТЬ"}
-                  </motion.button>
+                    {/* Spin */}
+                    <motion.button onClick={doSpin} disabled={!canSpin}
+                      whileHover={canSpin ? { scale:1.06 } : {}}
+                      whileTap={canSpin ? { scale:0.94 } : {}}
+                      style={{
+                        padding:"12px 28px", borderRadius:"14px", border:"none",
+                        cursor: canSpin ? "pointer" : "not-allowed",
+                        background: spinning ? "rgba(124,58,237,0.3)" : canSpin
+                          ? "linear-gradient(135deg,#f59e0b,#ef4444)"
+                          : "rgba(255,255,255,0.05)",
+                        color:"#fff", fontSize:"16px", fontWeight:900,
+                        letterSpacing:"1px",
+                        boxShadow: canSpin && !spinning ? "0 6px 28px rgba(245,158,11,0.45), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
+                        transition:"all 0.2s",
+                        minWidth:"110px",
+                      }}>
+                      {spinning ? "⏳" : balance === 0 ? "💸" : "SPIN"}
+                    </motion.button>
+                  </div>
 
                   {balance === 0 && (
                     <button onClick={() => { setBalance(1000); setHistory([]); setResult(null); }}
-                      style={{ width:"100%", padding:"10px", borderRadius:"12px", border:"1px solid rgba(16,185,129,0.3)", background:"rgba(16,185,129,0.1)", color:"#10b981", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
-                      ↺ Начать заново (1000 монет)
+                      style={{ width:"100%", marginTop:"10px", padding:"10px", borderRadius:"12px", border:"1px solid rgba(16,185,129,0.3)", background:"rgba(16,185,129,0.08)", color:"#10b981", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+                      ↺ Начать заново · 1000 монет
                     </button>
                   )}
                 </div>
 
                 {/* Right panel */}
-                <div style={{ display:"flex", flexDirection:"column", gap:"14px" }}>
-
+                <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
                   {/* Result */}
                   <AnimatePresence mode="wait">
                     {result && !spinning && (
-                      <motion.div key={result.payout + result.bet}
-                        initial={{ opacity:0, y:-10, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0 }}
-                        style={{ background: result.slot.mult === 0 ? "rgba(239,68,68,0.08)" : "rgba(124,58,237,0.12)", border:`2px solid ${result.slot.mult === 0 ? "rgba(239,68,68,0.3)" : result.slot.mult >= 10 ? "rgba(245,158,11,0.5)" : "rgba(124,58,237,0.35)"}`, borderRadius:"16px", padding:"18px 20px", textAlign:"center" }}>
-                        <div style={{ fontSize:"32px", marginBottom:"6px" }}>
-                          {result.slot.mult === 0 ? "💀" : result.slot.mult >= 50 ? "🎊" : result.slot.mult >= 10 ? "🤑" : "✨"}
+                      <motion.div key={result.payout + result.bet + result.type}
+                        initial={{ opacity:0, scale:0.8, y:-10 }}
+                        animate={{ opacity:1, scale:1, y:0 }}
+                        exit={{ opacity:0, scale:0.9 }}
+                        style={{
+                          background: result.type === "lose"
+                            ? "rgba(239,68,68,0.07)"
+                            : result.type === "triple" && result.mult >= 30
+                            ? "rgba(245,158,11,0.12)"
+                            : "rgba(124,58,237,0.1)",
+                          border:`2px solid ${result.type === "lose" ? "rgba(239,68,68,0.25)" : result.mult >= 30 ? "rgba(245,158,11,0.4)" : "rgba(124,58,237,0.3)"}`,
+                          borderRadius:"16px", padding:"16px", textAlign:"center",
+                        }}>
+                        <div style={{ fontSize:"28px", marginBottom:"6px" }}>
+                          {result.type === "lose" ? "💀" : result.mult >= 100 ? "🎊" : result.mult >= 30 ? "🤑" : result.mult >= 10 ? "🔥" : "✨"}
                         </div>
-                        <div style={{ color: result.slot.mult === 0 ? "#ef4444" : result.slot.mult >= 10 ? "#f59e0b" : "#a78bfa", fontSize:"22px", fontWeight:800, marginBottom:"4px" }}>
-                          {result.slot.label}
+                        <div style={{
+                          fontSize:"13px", fontWeight:800, marginBottom:"4px", letterSpacing:"1px",
+                          color: result.type === "lose" ? "#ef4444" : result.mult >= 30 ? "#f59e0b" : "#a78bfa",
+                          animation: result.type !== "lose" ? "glow-win 1s ease-in-out infinite" : "none",
+                        }}>
+                          {result.type === "triple" ? "ТРОЙКА!" : result.type === "pair" ? "ПАРА!" : "ПРОИГРЫШ"}
                         </div>
-                        {result.slot.mult > 0 ? (
-                          <div style={{ color:"#10b981", fontSize:"16px", fontWeight:700 }}>
-                            + 🪙 {result.payout.toLocaleString()}
-                            <span style={{ color:"rgba(255,255,255,0.3)", fontSize:"12px", fontWeight:400 }}> (ставка {result.bet})</span>
-                          </div>
+                        {result.payout > 0 ? (
+                          <div style={{ color:"#10b981", fontSize:"20px", fontWeight:900 }}>+{result.payout} 🪙</div>
                         ) : (
-                          <div style={{ color:"rgba(255,255,255,0.35)", fontSize:"13px" }}>
-                            Потеряно 🪙 {result.bet}
-                          </div>
+                          <div style={{ color:"rgba(255,255,255,0.25)", fontSize:"13px" }}>−{result.bet} 🪙</div>
                         )}
-                      </motion.div>
-                    )}
-                    {!result && !spinning && (
-                      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}
-                        style={{ background:cardBg, border:`1px solid ${border}`, borderRadius:"16px", padding:"20px", textAlign:"center" }}>
-                        <div style={{ fontSize:"28px", marginBottom:"8px" }}>🎰</div>
-                        <div style={{ color:"rgba(255,255,255,0.25)", fontSize:"13px" }}>Сделай ставку и крути!</div>
                       </motion.div>
                     )}
                   </AnimatePresence>
 
                   {/* Paytable */}
-                  <div style={{ background:cardBg, border:`1px solid ${border}`, borderRadius:"14px", padding:"14px 16px" }}>
-                    <div style={{ color:"rgba(255,255,255,0.4)", fontSize:"11px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:"10px" }}>Таблица выплат</div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:"5px" }}>
-                      {[
-                        { label:"🎰 ДЖЕКПОТ", mult:50, color:"#f59e0b", chance:"~0.3%" },
-                        { label:"👑 ×10",     mult:10, color:"#db2877", chance:"~0.7%" },
-                        { label:"🔥 ×5",      mult:5,  color:"#f97316", chance:"~3%"   },
-                        { label:"💎 ×3",      mult:3,  color:"#0ea5e9", chance:"~8%"   },
-                        { label:"✨ ×2",      mult:2,  color:"#7c3aed", chance:"~18%"  },
-                        { label:"💀 Проигрыш",mult:0,  color:"#ef4444", chance:"~70%"  },
-                      ].map((row, i) => (
-                        <div key={i} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"5px 8px", borderRadius:"7px", background: i === 0 ? "rgba(245,158,11,0.08)" : "transparent" }}>
-                          <span style={{ color:row.color, fontSize:"13px", fontWeight:700, flex:1 }}>{row.label}</span>
-                          {row.mult > 0 && <span style={{ color:"#10b981", fontSize:"12px", fontWeight:700 }}>×{row.mult} ставки</span>}
-                          <span style={{ color:"rgba(255,255,255,0.2)", fontSize:"10px" }}>{row.chance}</span>
-                        </div>
-                      ))}
+                  <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:"14px", padding:"12px 14px", flex:1 }}>
+                    <div style={{ color:"rgba(255,255,255,0.25)", fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px", marginBottom:"8px" }}>Выплаты</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:"3px" }}>
+                      {SYMBOLS.slice(0,8).map((sym, i) => {
+                        const p = PAYOUTS[sym.id];
+                        if (!p || (p.x3 === 0 && p.x2 === 0)) return null;
+                        return (
+                          <div key={sym.id} style={{ display:"flex", alignItems:"center", gap:"6px", padding:"3px 6px", borderRadius:"6px", background: i < 2 ? "rgba(245,158,11,0.06)" : "transparent" }}>
+                            <span style={{ fontSize:"14px", width:"20px", textAlign:"center" }}>{sym.emoji}{sym.emoji}{sym.emoji}</span>
+                            <span style={{ color:sym.color, fontSize:"11px", fontWeight:700, flex:1 }}>×{p.x3}</span>
+                            {p.x2 > 0 && <span style={{ color:"rgba(255,255,255,0.2)", fontSize:"10px" }}>{sym.emoji}{sym.emoji}=×{p.x2}</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
                   {/* History */}
                   {history.length > 0 && (
-                    <div style={{ background:cardBg, border:`1px solid ${border}`, borderRadius:"14px", padding:"14px 16px" }}>
-                      <div style={{ color:"rgba(255,255,255,0.4)", fontSize:"11px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:"8px" }}>История</div>
-                      <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                        {history.map((h, i) => (
-                          <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", fontSize:"12px" }}>
-                            <span style={{ color:"rgba(255,255,255,0.4)" }}>{h.time}</span>
-                            <span style={{ color:"rgba(255,255,255,0.6)" }}>{h.slot.label}</span>
-                            <span style={{ color: h.payout > 0 ? "#10b981" : "#ef4444", fontWeight:700 }}>
-                              {h.payout > 0 ? `+${h.payout}` : `-${h.bet}`}
-                            </span>
+                    <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)", borderRadius:"12px", padding:"10px 12px" }}>
+                      <div style={{ color:"rgba(255,255,255,0.2)", fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px", marginBottom:"6px" }}>История</div>
+                      {history.slice(0,5).map((h,i) => (
+                        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"3px 0", borderBottom: i<Math.min(history.length,5)-1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
+                          <div style={{ display:"flex", gap:"2px" }}>
+                            {h.finals.map((s,j) => <span key={j} style={{ fontSize:"12px" }}>{s.emoji}</span>)}
                           </div>
-                        ))}
-                      </div>
+                          <span style={{ color: h.payout > 0 ? "#10b981" : "#ef4444", fontSize:"12px", fontWeight:700 }}>
+                            {h.payout > 0 ? `+${h.payout}` : `-${h.bet}`}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -925,7 +948,7 @@ export default function Layout({ children }) {
       </div>
 
       {/* 🎰 Secret roulette trigger */}
-      <SecretRoulette users={allUsers} t={t} />
+      <SecretSlots t={t} />
     </div>
   );
 }
