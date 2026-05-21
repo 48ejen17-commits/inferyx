@@ -118,135 +118,250 @@ const calcPayout = (reels, bet) => {
   return { mult: 0, type: "lose", sym: null };
 };
 
-function SecretSlots({ t }) {
-  const [open, setOpen]       = useState(false);
-  const [hovered, setHovered] = useState(false);
-  const [spinning, setSpinning] = useState(false);
-  const [reels, setReels]     = useState([SYMBOLS[8], SYMBOLS[4], SYMBOLS[6]]);
-  const [result, setResult]   = useState(null);
-  const [bet, setBet]         = useState(100);
-  const [balance, setBalance] = useState(1000);
-  const [history, setHistory] = useState([]);
-  const [flash, setFlash]     = useState(null); // "win"|"jackpot"|"lose"
-  const [raining, setRaining] = useState(false);
+// ── CASINO SLOTS ──────────────────────────────────────────────────────────────
+const SYMBOLS = [
+  { id: "seven",   emoji: "7️⃣",  label: "7",       color: "#ef4444", weight: 2  },
+  { id: "diamond", emoji: "💎",  label: "DIAMOND", color: "#0ea5e9", weight: 4  },
+  { id: "crown",   emoji: "👑",  label: "CROWN",   color: "#f59e0b", weight: 5  },
+  { id: "star",    emoji: "⭐",  label: "STAR",    color: "#a78bfa", weight: 8  },
+  { id: "cherry",  emoji: "🍒",  label: "CHERRY",  color: "#db2877", weight: 10 },
+  { id: "lemon",   emoji: "🍋",  label: "LEMON",   color: "#84cc16", weight: 12 },
+  { id: "grape",   emoji: "🍇",  label: "GRAPE",   color: "#8b5cf6", weight: 13 },
+  { id: "bell",    emoji: "🔔",  label: "BELL",    color: "#f97316", weight: 14 },
+  { id: "skull",   emoji: "💀",  label: "SKULL",   color: "#475569", weight: 15 },
+];
 
-  // Reel animation state — each reel has its own spinning symbols
+const PAYOUTS = {
+  seven:   { x3: 100, x2: 10 },
+  diamond: { x3: 50,  x2: 7  },
+  crown:   { x3: 30,  x2: 5  },
+  star:    { x3: 20,  x2: 4  },
+  cherry:  { x3: 15,  x2: 3  },
+  lemon:   { x3: 12,  x2: 2  },
+  grape:   { x3: 10,  x2: 0  },
+  bell:    { x3: 6,   x2: 0  },
+  skull:   { x3: 0,   x2: 0  },
+};
+
+const POOL = [];
+SYMBOLS.forEach(s => { for (let i = 0; i < s.weight; i++) POOL.push(s); });
+const randSym = () => POOL[Math.floor(Math.random() * POOL.length)];
+
+const calcResult = (reels) => {
+  const ids = reels.map(r => r.id);
+  if (ids[0] === ids[1] && ids[1] === ids[2]) {
+    const mult = PAYOUTS[ids[0]]?.x3 || 0;
+    return { mult, type: mult > 0 ? "triple" : "lose", sym: reels[0] };
+  }
+  if (ids[0] === ids[1] || ids[1] === ids[2]) {
+    const matchId = ids[0] === ids[1] ? ids[0] : ids[1];
+    const mult = PAYOUTS[matchId]?.x2 || 0;
+    return { mult, type: mult > 0 ? "pair" : "lose", sym: SYMBOLS.find(s => s.id === matchId) };
+  }
+  return { mult: 0, type: "lose", sym: null };
+};
+
+const SLOT_KEY    = "inferyx_slots_balance";
+const SLOT_BONUS  = "inferyx_slots_lastbonus";
+const SLOT_SCORES = "inferyx_slots_scores";
+const BONUS_COINS = 50;
+const BONUS_HOURS = 1;
+
+function SecretSlots({ t }) {
+  const { user, profile } = useAuth();
+  const { db } = useAuth();
+
+  const [open, setOpen]         = useState(false);
+  const [hovered, setHovered]   = useState(false);
+  const [spinning, setSpinning] = useState(false);
+  const [result, setResult]     = useState(null);
+  const [bet, setBet]           = useState(100);
+  const [flash, setFlash]       = useState(null);
+  const [raining, setRaining]   = useState(false);
+  const [bonusMsg, setBonusMsg] = useState("");
+  const [nextBonus, setNextBonus] = useState(null);
+  const [showRating, setShowRating] = useState(false);
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  // Balance persisted in localStorage per user
+  const balanceKey = user?.uid ? `${SLOT_KEY}_${user.uid}` : SLOT_KEY;
+  const bonusKey   = user?.uid ? `${SLOT_BONUS}_${user.uid}` : SLOT_BONUS;
+
+  const [balance, setBalanceState] = useState(() => {
+    const saved = localStorage.getItem(balanceKey);
+    return saved ? parseInt(saved) : 1000;
+  });
+  const [history, setHistory] = useState([]);
+
+  const setBalance = (fn) => {
+    setBalanceState(prev => {
+      const next = typeof fn === "function" ? fn(prev) : fn;
+      localStorage.setItem(balanceKey, String(next));
+      return next;
+    });
+  };
+
+  // Hourly bonus
+  useEffect(() => {
+    const checkBonus = () => {
+      const last = parseInt(localStorage.getItem(bonusKey) || "0");
+      const now  = Date.now();
+      const diff = now - last;
+      const needed = BONUS_HOURS * 60 * 60 * 1000;
+      if (diff >= needed) {
+        setNextBonus(null);
+      } else {
+        const remaining = needed - diff;
+        setNextBonus(remaining);
+      }
+    };
+    checkBonus();
+    const interval = setInterval(checkBonus, 30000);
+    return () => clearInterval(interval);
+  }, [bonusKey]);
+
+  const claimBonus = () => {
+    const last = parseInt(localStorage.getItem(bonusKey) || "0");
+    const diff = Date.now() - last;
+    if (diff < BONUS_HOURS * 60 * 60 * 1000) return;
+    localStorage.setItem(bonusKey, String(Date.now()));
+    setBalance(b => b + BONUS_COINS);
+    setBonusMsg(`+${BONUS_COINS} 🪙 бонус получен!`);
+    setNextBonus(BONUS_HOURS * 60 * 60 * 1000);
+    setTimeout(() => setBonusMsg(""), 3000);
+  };
+
+  // Save score to Firestore + load leaderboard
+  const saveScore = async (newBalance) => {
+    if (!db || !user?.uid) return;
+    try {
+      const { doc, setDoc } = await import("firebase/firestore");
+      await setDoc(doc(db, "slots_scores", user.uid), {
+        name: profile?.name || "—",
+        role: profile?.role || "",
+        avatarEmoji: profile?.avatarEmoji || "",
+        avatarColor: profile?.avatarColor || "#7c3aed",
+        balance: newBalance,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!db) return;
+    const loadLeaderboard = async () => {
+      try {
+        const { collection, onSnapshot, orderBy, query } = await import("firebase/firestore");
+        return onSnapshot(
+          query(collection(db, "slots_scores"), orderBy("balance", "desc")),
+          snap => setLeaderboard(snap.docs.map(d => ({ id: d.id, ...d.data() })).slice(0, 10))
+        );
+      } catch {}
+    };
+    loadLeaderboard().then(unsub => { if (unsub) return () => unsub(); });
+  }, [db]);
+
+  // Reel displays
   const [reelDisplays, setReelDisplays] = useState([
     [SYMBOLS[8], SYMBOLS[4], SYMBOLS[6]],
     [SYMBOLS[4], SYMBOLS[6], SYMBOLS[8]],
     [SYMBOLS[6], SYMBOLS[8], SYMBOLS[4]],
   ]);
-  const [reelSpeeds, setReelSpeeds] = useState([0, 0, 0]);
-  const animRef = useRef(null);
-  const confRef = useRef([]);
+  const animRef     = useRef(null);
+  const confRef     = useRef([]);
   const confCanvasRef = useRef(null);
   const [confActive, setConfActive] = useState(false);
 
   const doSpin = () => {
     if (spinning || bet > balance || bet <= 0) return;
     setBalance(b => b - bet);
-    setResult(null);
-    setFlash(null);
+    setResult(null); setFlash(null);
     setSpinning(true);
 
-    // Pick final results
-    const finals = [randSym(), randSym(), randSym()];
-
-    // Generate long strips for each reel
-    const strips = finals.map(final => {
-      const strip = Array.from({ length: 30 }, () => randSym());
+    const finals  = [randSym(), randSym(), randSym()];
+    const strips  = finals.map(final => {
+      const strip = Array.from({ length: 32 }, () => randSym());
       strip[strip.length - 1] = final;
       return strip;
     });
 
     let frameCount = 0;
-    const REEL_FRAMES = [38, 48, 58]; // each reel stops at different time
-    const indexes = [0, 0, 0];
+    const STOP_AT  = [40, 52, 64];
+    const indexes  = [0, 0, 0];
 
     const animate = () => {
       frameCount++;
-      setReelDisplays(prev => {
-        const next = [...prev];
+      setReelDisplays(() => {
+        const next = [[], [], []];
         for (let r = 0; r < 3; r++) {
-          if (frameCount < REEL_FRAMES[r]) {
-            // Still spinning — cycle through strip rapidly
-            const speed = Math.max(1, Math.floor((REEL_FRAMES[r] - frameCount) / 8));
-            if (frameCount % Math.max(1, Math.floor(speed * 0.4)) === 0) {
+          if (frameCount < STOP_AT[r]) {
+            const speed = Math.max(1, Math.floor((STOP_AT[r] - frameCount) / 10));
+            if (frameCount % Math.max(1, Math.floor(speed * 0.3)) === 0) {
               indexes[r] = (indexes[r] + 1) % strips[r].length;
             }
-            const i = indexes[r];
-            const strip = strips[r];
+            const i = strips[r].length;
             next[r] = [
-              strip[(i + strip.length - 1) % strip.length],
-              strip[i],
-              strip[(i + 1) % strip.length],
+              strips[r][(indexes[r] + strips[r].length - 1) % strips[r].length],
+              strips[r][indexes[r]],
+              strips[r][(indexes[r] + 1) % strips[r].length],
             ];
           } else {
-            // Stopped — show final
             next[r] = [
-              strips[r][strips[r].length - 2] || strips[r][0],
+              strips[r][strips[r].length - 2] || SYMBOLS[0],
               finals[r],
-              strips[r][strips[r].length - 3] || strips[r][1],
+              strips[r][strips[r].length - 3] || SYMBOLS[1],
             ];
           }
         }
         return next;
       });
 
-      if (frameCount < REEL_FRAMES[2] + 8) {
+      if (frameCount < STOP_AT[2] + 6) {
         animRef.current = requestAnimationFrame(animate);
       } else {
-        // All stopped
-        setReels(finals);
         setSpinning(false);
-
-        const res = calcPayout(finals, bet);
+        const res    = calcResult(finals);
         const payout = Math.round(bet * res.mult);
-        setBalance(b => b + payout);
+        setBalance(b => {
+          const newBal = b + payout;
+          saveScore(newBal);
+          return newBal;
+        });
         setResult({ ...res, payout, bet });
-        setHistory(h => [{
-          finals, payout, bet, type: res.type,
-          time: new Date().toLocaleTimeString("ru-RU", { hour:"2-digit", minute:"2-digit" })
-        }, ...h].slice(0, 10));
+        setHistory(h => [{ finals, payout, bet, type: res.type, time: new Date().toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}) }, ...h].slice(0, 10));
 
         if (res.type === "triple" && res.mult >= 30) {
-          setFlash("jackpot");
-          setRaining(true);
+          setFlash("jackpot"); setRaining(true);
           setTimeout(() => setRaining(false), 4000);
         } else if (res.type !== "lose") {
           setFlash("win");
         } else {
           setFlash("lose");
         }
+        setTimeout(() => setFlash(null), 2000);
 
         if (res.type !== "lose") {
           confRef.current = Array.from({ length: res.mult >= 30 ? 200 : 80 }, () => ({
-            x: Math.random() * window.innerWidth,
-            y: -20 - Math.random() * 100,
-            vx: (Math.random() - 0.5) * (res.mult >= 30 ? 12 : 6),
-            vy: 2 + Math.random() * 5,
-            w: 6 + Math.random() * 10, h: 4 + Math.random() * 6,
-            color: ["#f59e0b","#7c3aed","#db2877","#10b981","#0ea5e9","#f97316","#fff","#fbbf24"][Math.floor(Math.random()*8)],
+            x: Math.random() * window.innerWidth, y: -20 - Math.random() * 80,
+            vx: (Math.random()-0.5)*(res.mult>=30?12:6), vy: 2+Math.random()*5,
+            w: 6+Math.random()*10, h: 4+Math.random()*6,
+            color: ["#f59e0b","#7c3aed","#db2877","#10b981","#0ea5e9","#fff","#fbbf24"][Math.floor(Math.random()*7)],
             rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.2, opacity: 1,
           }));
           setConfActive(true);
-          setTimeout(() => setConfActive(false), res.mult >= 30 ? 5000 : 2500);
+          setTimeout(() => setConfActive(false), res.mult>=30?5000:2500);
         }
-
-        setTimeout(() => setFlash(null), 2000);
       }
     };
     animRef.current = requestAnimationFrame(animate);
   };
 
-  // Confetti canvas
   useEffect(() => {
     if (!confActive) return;
     const canvas = confCanvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
     let alive = true;
     const loop = () => {
       if (!alive) return;
@@ -254,9 +369,9 @@ function SecretSlots({ t }) {
       confRef.current.forEach(p => {
         p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.rot+=p.rotV;
         if (p.y > canvas.height*0.8) p.opacity -= 0.02;
-        ctx.save(); ctx.globalAlpha = Math.max(0,p.opacity);
+        ctx.save(); ctx.globalAlpha=Math.max(0,p.opacity);
         ctx.translate(p.x,p.y); ctx.rotate(p.rot);
-        ctx.fillStyle = p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        ctx.fillStyle=p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
         ctx.restore();
       });
       confRef.current = confRef.current.filter(p => p.opacity > 0);
@@ -267,321 +382,253 @@ function SecretSlots({ t }) {
   }, [confActive]);
 
   const canSpin = !spinning && bet > 0 && bet <= balance;
+  const canBonus = nextBonus === null;
 
-  // Flash overlay colors
+  const fmtTime = (ms) => {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${m}м ${s}с`;
+  };
+
   const flashStyle = flash === "jackpot"
-    ? { background: "rgba(245,158,11,0.18)", boxShadow: "inset 0 0 60px rgba(245,158,11,0.3)" }
+    ? { boxShadow:"0 0 60px rgba(245,158,11,0.4), inset 0 0 40px rgba(245,158,11,0.15)" }
     : flash === "win"
-    ? { background: "rgba(124,58,237,0.12)", boxShadow: "inset 0 0 40px rgba(124,58,237,0.2)" }
+    ? { boxShadow:"0 0 40px rgba(124,58,237,0.3), inset 0 0 30px rgba(124,58,237,0.1)" }
     : flash === "lose"
-    ? { background: "rgba(239,68,68,0.10)", boxShadow: "inset 0 0 40px rgba(239,68,68,0.15)" }
+    ? { boxShadow:"0 0 30px rgba(239,68,68,0.2), inset 0 0 20px rgba(239,68,68,0.08)" }
     : {};
 
   return (
     <>
-      {confActive && <canvas ref={confCanvasRef} style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:9999 }} />}
+      {confActive && <canvas ref={confCanvasRef} style={{ position:"fixed",inset:0,pointerEvents:"none",zIndex:9999 }} />}
 
-      {/* Raining symbols on jackpot */}
       {raining && (
-        <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:9998, overflow:"hidden" }}>
-          {Array.from({length:20}).map((_,i) => (
-            <div key={i} style={{
-              position:"absolute", top:"-60px",
-              left: `${Math.random()*100}%`,
-              fontSize: `${24+Math.random()*20}px`,
-              animation: `fall ${1+Math.random()*2}s linear ${Math.random()*2}s forwards`,
-              opacity: 0.8,
-            }}>
-              {SYMBOLS[Math.floor(Math.random()*5)].emoji}
+        <div style={{ position:"fixed",inset:0,pointerEvents:"none",zIndex:9998,overflow:"hidden" }}>
+          {Array.from({length:16}).map((_,i) => (
+            <div key={i} style={{ position:"absolute",top:"-60px",left:`${5+i*6}%`,fontSize:`${20+Math.random()*20}px`,animation:`fall ${1.5+Math.random()*2}s linear ${Math.random()*1.5}s forwards`,opacity:0.9 }}>
+              {SYMBOLS[Math.floor(Math.random()*4)].emoji}
             </div>
           ))}
         </div>
       )}
 
-      {/* CSS for falling animation */}
       <style>{`
-        @keyframes fall {
-          0% { transform: translateY(0) rotate(0deg); opacity: 0.8; }
-          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-        }
-        @keyframes reelBounce {
-          0%,100% { transform: scaleY(1); }
-          50% { transform: scaleY(1.04); }
-        }
-        @keyframes pulse-gold {
-          0%,100% { box-shadow: 0 0 20px rgba(245,158,11,0.4), inset 0 0 20px rgba(245,158,11,0.1); }
-          50% { box-shadow: 0 0 50px rgba(245,158,11,0.8), inset 0 0 40px rgba(245,158,11,0.2); }
-        }
-        @keyframes shake {
-          0%,100% { transform: translateX(0); }
-          20% { transform: translateX(-6px); }
-          40% { transform: translateX(6px); }
-          60% { transform: translateX(-4px); }
-          80% { transform: translateX(4px); }
-        }
-        @keyframes glow-win {
-          0%,100% { text-shadow: 0 0 10px currentColor; }
-          50% { text-shadow: 0 0 30px currentColor, 0 0 60px currentColor; }
-        }
+        @keyframes fall { 0%{transform:translateY(0) rotate(0);opacity:.9} 100%{transform:translateY(110vh) rotate(540deg);opacity:0} }
+        @keyframes slotBounce { 0%,100%{transform:scale(1)} 50%{transform:scale(1.03)} }
+        @keyframes glowPulse { 0%,100%{opacity:.7} 50%{opacity:1;filter:brightness(1.3)} }
+        @keyframes shakeX { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-5px)} 40%{transform:translateX(5px)} 60%{transform:translateX(-3px)} 80%{transform:translateX(3px)} }
+        @keyframes jackpotPulse { 0%,100%{box-shadow:0 0 20px rgba(245,158,11,0.4)} 50%{box-shadow:0 0 60px rgba(245,158,11,0.8),inset 0 0 30px rgba(245,158,11,0.2)} }
       `}</style>
 
       {/* Secret trigger */}
-      <div
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onClick={() => { setOpen(true); setResult(null); setFlash(null); }}
-        style={{
-          position:"fixed", right:0, top:"50%", transform:"translateY(-50%)",
-          width: hovered ? "44px" : "6px", height:"80px",
-          borderRadius:"12px 0 0 12px",
-          background: hovered ? "linear-gradient(135deg,#f59e0b,#ef4444)" : "rgba(245,158,11,0.25)",
-          cursor:"pointer", zIndex:500,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          transition:"all 0.25s cubic-bezier(0.34,1.56,0.64,1)",
-          boxShadow: hovered ? "0 0 24px rgba(245,158,11,0.6)" : "none",
-          overflow:"hidden",
-        }}>
-        {hovered && <span style={{ fontSize:"22px", userSelect:"none" }}>🎰</span>}
+      <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
+        onClick={()=>{setOpen(true);setResult(null);setFlash(null);}}
+        style={{ position:"fixed",right:0,top:"50%",transform:"translateY(-50%)",width:hovered?"44px":"6px",height:"80px",borderRadius:"12px 0 0 12px",background:hovered?"linear-gradient(135deg,#f59e0b,#ef4444)":"rgba(245,158,11,0.25)",cursor:"pointer",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.25s cubic-bezier(0.34,1.56,0.64,1)",boxShadow:hovered?"0 0 24px rgba(245,158,11,0.6)":"none",overflow:"hidden" }}>
+        {hovered && <span style={{fontSize:"22px",userSelect:"none"}}>🎰</span>}
       </div>
 
-      {/* Modal */}
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            onClick={() => !spinning && setOpen(false)}
-            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:"16px" }}>
-            <motion.div initial={{ scale:0.85, opacity:0, y:30 }} animate={{ scale:1, opacity:1, y:0 }} exit={{ scale:0.85, opacity:0, y:30 }}
-              transition={{ type:"spring", stiffness:260, damping:22 }}
-              onClick={e => e.stopPropagation()}
-              style={{
-                background:"linear-gradient(160deg,#09050f,#140a2a,#09050f)",
-                border:"1px solid rgba(245,158,11,0.25)",
-                borderRadius:"28px", padding:"28px 28px 24px",
-                width:"100%", maxWidth:"680px",
-                boxShadow:"0 40px 120px rgba(0,0,0,0.9), inset 0 1px 0 rgba(255,255,255,0.06)",
-                transition:"all 0.3s",
-                animation: flash === "jackpot" ? "pulse-gold 0.5s ease-in-out 4" : flash === "shake" ? "shake 0.3s" : "none",
-                ...flashStyle,
-              }}>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+            onClick={()=>!spinning&&setOpen(false)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
+            <motion.div initial={{scale:0.85,opacity:0,y:30}} animate={{scale:1,opacity:1,y:0}} exit={{scale:0.85,opacity:0,y:30}}
+              transition={{type:"spring",stiffness:260,damping:22}}
+              onClick={e=>e.stopPropagation()}
+              style={{background:"linear-gradient(160deg,#09050f,#140a2a,#09050f)",border:"1px solid rgba(245,158,11,0.25)",borderRadius:"28px",padding:"24px 24px 20px",width:"100%",maxWidth:"700px",transition:"box-shadow 0.3s",...flashStyle,animation:flash==="lose"?"shakeX 0.4s ease":flash==="jackpot"?"jackpotPulse 0.5s ease 4":"none"}}>
 
               {/* Header */}
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"22px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                  <div style={{
-                    width:"48px", height:"48px", borderRadius:"14px",
-                    background:"linear-gradient(135deg,#f59e0b,#ef4444)",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:"24px", boxShadow:"0 4px 20px rgba(245,158,11,0.5)",
-                    animation: spinning ? "reelBounce 0.3s infinite" : "none",
-                  }}>🎰</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                  <div style={{width:"44px",height:"44px",borderRadius:"14px",background:"linear-gradient(135deg,#f59e0b,#ef4444)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"24px",boxShadow:"0 4px 20px rgba(245,158,11,0.5)",animation:spinning?"slotBounce 0.3s infinite":"none"}}>🎰</div>
                   <div>
-                    <div style={{ color:"#fff", fontSize:"22px", fontWeight:900, letterSpacing:"3px", textShadow:"0 0 20px rgba(245,158,11,0.5)" }}>SLOTS</div>
-                    <div style={{ color:"rgba(245,158,11,0.5)", fontSize:"11px", letterSpacing:"1px" }}>КОМАНДА CASINO · ТОЛЬКО ДЛЯ РАЗВЛЕЧЕНИЯ</div>
+                    <div style={{color:"#fff",fontSize:"20px",fontWeight:900,letterSpacing:"3px",textShadow:"0 0 20px rgba(245,158,11,0.5)"}}>SLOTS</div>
+                    <div style={{color:"rgba(245,158,11,0.4)",fontSize:"10px",letterSpacing:"1px"}}>КОМАНДА CASINO · ТОЛЬКО ДЛЯ РАЗВЛЕЧЕНИЯ</div>
                   </div>
                 </div>
-                <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                  <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"14px", padding:"8px 18px", textAlign:"center" }}>
-                    <div style={{ color:"rgba(255,255,255,0.3)", fontSize:"9px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px" }}>БАЛАНС</div>
-                    <div style={{ color:"#f59e0b", fontSize:"22px", fontWeight:900, textShadow:"0 0 10px rgba(245,158,11,0.5)" }}>🪙 {balance.toLocaleString()}</div>
+                <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+                  {/* Balance */}
+                  <div style={{background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:"12px",padding:"6px 14px",textAlign:"center"}}>
+                    <div style={{color:"rgba(255,255,255,0.3)",fontSize:"9px",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px"}}>БАЛАНС</div>
+                    <div style={{color:"#f59e0b",fontSize:"20px",fontWeight:900}}>🪙 {balance.toLocaleString()}</div>
                   </div>
-                  <button onClick={() => !spinning && setOpen(false)}
-                    style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.3)", borderRadius:"10px", width:"36px", height:"36px", cursor:"pointer", fontSize:"20px", display:"flex", alignItems:"center", justifyContent:"center" }}>×</button>
+                  {/* Rating toggle */}
+                  <button onClick={()=>setShowRating(r=>!r)}
+                    style={{background:showRating?"rgba(124,58,237,0.2)":"rgba(255,255,255,0.04)",border:`1px solid ${showRating?"rgba(124,58,237,0.4)":"rgba(255,255,255,0.08)"}`,color:showRating?"#a78bfa":"rgba(255,255,255,0.3)",borderRadius:"10px",padding:"6px 12px",cursor:"pointer",fontSize:"12px",fontWeight:700}}>
+                    🏆 Рейтинг
+                  </button>
+                  <button onClick={()=>!spinning&&setOpen(false)}
+                    style={{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.3)",borderRadius:"10px",width:"34px",height:"34px",cursor:"pointer",fontSize:"18px",display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                 </div>
               </div>
 
-              {/* Main area */}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 220px", gap:"20px" }}>
+              {/* Bonus bar */}
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"16px",padding:"8px 14px",background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"12px"}}>
+                <span style={{fontSize:"16px"}}>🎁</span>
+                <span style={{color:"rgba(255,255,255,0.4)",fontSize:"12px",flex:1}}>
+                  {canBonus ? "Бесплатные монеты доступны!" : `Следующий бонус через ${fmtTime(nextBonus||0)}`}
+                </span>
+                {bonusMsg && <span style={{color:"#10b981",fontSize:"12px",fontWeight:700}}>{bonusMsg}</span>}
+                <button onClick={claimBonus} disabled={!canBonus}
+                  style={{background:canBonus?"linear-gradient(135deg,#10b981,#059669)":"rgba(255,255,255,0.05)",border:"none",color:canBonus?"#fff":"rgba(255,255,255,0.2)",borderRadius:"8px",padding:"6px 14px",cursor:canBonus?"pointer":"not-allowed",fontSize:"12px",fontWeight:700,transition:"all 0.2s",boxShadow:canBonus?"0 0 12px rgba(16,185,129,0.4)":"none"}}>
+                  +{BONUS_COINS} 🪙
+                </button>
+              </div>
+
+              <div style={{display:"grid",gridTemplateColumns:showRating?"1fr 200px":"1fr 210px",gap:"16px"}}>
+                {/* Left: machine */}
                 <div>
-                  {/* Slot machine body */}
-                  <div style={{
-                    background:"linear-gradient(180deg,#1a0f2e,#0f0720)",
-                    border:"2px solid rgba(245,158,11,0.3)",
-                    borderRadius:"20px", padding:"20px 16px",
-                    boxShadow:"inset 0 4px 20px rgba(0,0,0,0.5), 0 0 40px rgba(124,58,237,0.1)",
-                    marginBottom:"16px",
-                    animation: flash === "lose" ? "shake 0.4s ease" : "none",
-                  }}>
-                    {/* WIN line indicator */}
-                    <div style={{ display:"flex", justifyContent:"center", marginBottom:"10px" }}>
-                      <div style={{ background: flash === "jackpot" ? "rgba(245,158,11,0.2)" : flash === "win" ? "rgba(124,58,237,0.15)" : "rgba(255,255,255,0.04)", border:`1px solid ${flash === "jackpot" ? "rgba(245,158,11,0.5)" : flash === "win" ? "rgba(124,58,237,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius:"20px", padding:"3px 16px", fontSize:"11px", fontWeight:700, letterSpacing:"1px", color: flash === "jackpot" ? "#f59e0b" : flash === "win" ? "#a78bfa" : "rgba(255,255,255,0.2)" }}>
-                        {flash === "jackpot" ? "✨ JACKPOT ✨" : flash === "win" ? "▶ WIN LINE ◀" : "— WIN LINE —"}
+                  {/* Reels */}
+                  <div style={{background:"linear-gradient(180deg,#1a0f2e,#0f0720)",border:"2px solid rgba(245,158,11,0.25)",borderRadius:"18px",padding:"16px 12px",marginBottom:"14px",boxShadow:"inset 0 4px 20px rgba(0,0,0,0.5)"}}>
+                    {/* Winline label */}
+                    <div style={{display:"flex",justifyContent:"center",marginBottom:"8px"}}>
+                      <div style={{background:flash==="jackpot"?"rgba(245,158,11,0.2)":flash==="win"?"rgba(124,58,237,0.12)":"rgba(255,255,255,0.04)",border:`1px solid ${flash==="jackpot"?"rgba(245,158,11,0.5)":flash==="win"?"rgba(124,58,237,0.35)":"rgba(255,255,255,0.07)"}`,borderRadius:"20px",padding:"2px 14px",fontSize:"10px",fontWeight:700,letterSpacing:"1px",color:flash==="jackpot"?"#f59e0b":flash==="win"?"#a78bfa":"rgba(255,255,255,0.2)"}}>
+                        {flash==="jackpot"?"★ JACKPOT ★":flash==="win"?"▶ WIN ◀":"— WIN LINE —"}
                       </div>
                     </div>
 
-                    {/* Reels */}
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"8px", position:"relative" }}>
-                      {/* Win line highlight */}
-                      <div style={{
-                        position:"absolute", top:"50%", left:"-8px", right:"-8px",
-                        height:"2px", transform:"translateY(-50%)",
-                        background: flash === "jackpot" ? "rgba(245,158,11,0.6)" : flash === "win" ? "rgba(124,58,237,0.5)" : "rgba(255,255,255,0.06)",
-                        zIndex:10, pointerEvents:"none",
-                        transition:"background 0.3s",
-                      }} />
+                    {/* 3 reels */}
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",position:"relative"}}>
+                      {/* win line highlight */}
+                      <div style={{position:"absolute",top:"50%",left:"-4px",right:"-4px",height:"2px",transform:"translateY(-50%)",background:flash==="jackpot"?"rgba(245,158,11,0.7)":flash==="win"?"rgba(124,58,237,0.6)":"rgba(255,255,255,0.05)",zIndex:10,pointerEvents:"none",transition:"background 0.3s"}} />
 
                       {reelDisplays.map((reel, ri) => (
-                        <div key={ri} style={{
-                          background:"linear-gradient(180deg,#06030f,#0d0820,#06030f)",
-                          border:`1px solid ${spinning && ri === [0,1,2].find(i => frameRef => true) ? "rgba(245,158,11,0.4)" : "rgba(255,255,255,0.06)"}`,
-                          borderRadius:"14px",
-                          overflow:"hidden",
-                          height:"210px",
-                          display:"flex", flexDirection:"column",
-                          boxShadow:"inset 0 0 20px rgba(0,0,0,0.6)",
-                          position:"relative",
-                        }}>
-                          {/* Top fade */}
-                          <div style={{ position:"absolute", top:0, left:0, right:0, height:"50px", background:"linear-gradient(180deg,rgba(6,3,15,0.95),transparent)", zIndex:2, pointerEvents:"none" }} />
-                          {/* Bottom fade */}
-                          <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"50px", background:"linear-gradient(0deg,rgba(6,3,15,0.95),transparent)", zIndex:2, pointerEvents:"none" }} />
+                        <div key={ri} style={{background:"linear-gradient(180deg,#06030f,#0d0820,#06030f)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"12px",overflow:"hidden",height:"200px",display:"flex",flexDirection:"column",position:"relative"}}>
+                          {/* fade top */}
+                          <div style={{position:"absolute",top:0,left:0,right:0,height:"44px",background:"linear-gradient(180deg,rgba(6,3,15,0.97),transparent)",zIndex:2,pointerEvents:"none"}} />
+                          {/* fade bottom */}
+                          <div style={{position:"absolute",bottom:0,left:0,right:0,height:"44px",background:"linear-gradient(0deg,rgba(6,3,15,0.97),transparent)",zIndex:2,pointerEvents:"none"}} />
 
-                          {reel.map((sym, si) => (
-                            <div key={si} style={{
-                              flex:1, display:"flex", alignItems:"center", justifyContent:"center",
-                              flexDirection:"column",
-                              borderBottom: si < reel.length-1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                              background: si === 1 && !spinning && result ? `${result.sym?.color || sym.color}08` : "transparent",
-                              transition:"background 0.3s",
-                            }}>
-                              <div style={{
-                                fontSize:"40px", lineHeight:1,
-                                filter: si === 1 && !spinning && result?.type !== "lose" && result?.sym?.id === sym.id
-                                  ? `drop-shadow(0 0 12px ${sym.color})`
-                                  : si === 1 ? "none" : "brightness(0.4)",
-                                transition:"all 0.3s",
-                                animation: si === 1 && !spinning && result?.type === "triple" && result?.sym?.id === sym.id
-                                  ? "glow-win 0.8s ease-in-out infinite" : "none",
-                              }}>
-                                {sym.emoji}
+                          {reel.map((sym, si) => {
+                            const isCenter = si === 1;
+                            const isWin = isCenter && !spinning && result?.type !== "lose" && result?.sym?.id === sym.id;
+                            const isTriple = isWin && result?.type === "triple";
+                            return (
+                              <div key={si} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",borderBottom:si<reel.length-1?"1px solid rgba(255,255,255,0.04)":"none",background:isWin?`${sym.color}12`:"transparent",transition:"background 0.3s"}}>
+                                <div style={{fontSize:"38px",lineHeight:1,filter:isWin?`drop-shadow(0 0 10px ${sym.color})`:isCenter?"none":"brightness(0.35)",transition:"all 0.3s",animation:isTriple?"glowPulse 0.7s ease-in-out infinite":"none"}}>
+                                  {sym.emoji}
+                                </div>
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Bet + Spin */}
-                  <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
-                    {/* Bet chips */}
-                    <div style={{ display:"flex", gap:"5px", flex:1, flexWrap:"wrap" }}>
-                      {[25, 50, 100, 250, 500].map(v => (
-                        <button key={v} onClick={() => setBet(Math.min(v, balance))}
-                          style={{
-                            flex:1, minWidth:"42px", padding:"7px 4px",
-                            borderRadius:"10px",
-                            border:`2px solid ${bet===v ? "rgba(245,158,11,0.6)" : "rgba(255,255,255,0.06)"}`,
-                            background: bet===v ? "linear-gradient(135deg,rgba(245,158,11,0.2),rgba(239,68,68,0.15))" : "rgba(255,255,255,0.03)",
-                            color: bet===v ? "#f59e0b" : "rgba(255,255,255,0.3)",
-                            fontSize:"12px", fontWeight:800, cursor:"pointer",
-                            transition:"all 0.15s",
-                            boxShadow: bet===v ? "0 0 10px rgba(245,158,11,0.2)" : "none",
-                          }}>
+                  {/* Bet + Spin row */}
+                  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                    <div style={{display:"flex",gap:"4px",flex:1}}>
+                      {[25,50,100,250,500].map(v => (
+                        <button key={v} onClick={()=>setBet(Math.min(v,balance))}
+                          style={{flex:1,padding:"8px 2px",borderRadius:"9px",border:`2px solid ${bet===v?"rgba(245,158,11,0.55)":"rgba(255,255,255,0.06)"}`,background:bet===v?"rgba(245,158,11,0.15)":"rgba(255,255,255,0.03)",color:bet===v?"#f59e0b":"rgba(255,255,255,0.3)",fontSize:"12px",fontWeight:800,cursor:"pointer",transition:"all 0.15s",boxShadow:bet===v?"0 0 8px rgba(245,158,11,0.2)":"none"}}>
                           {v}
                         </button>
                       ))}
                     </div>
-
-                    {/* Spin */}
                     <motion.button onClick={doSpin} disabled={!canSpin}
-                      whileHover={canSpin ? { scale:1.06 } : {}}
-                      whileTap={canSpin ? { scale:0.94 } : {}}
-                      style={{
-                        padding:"12px 28px", borderRadius:"14px", border:"none",
-                        cursor: canSpin ? "pointer" : "not-allowed",
-                        background: spinning ? "rgba(124,58,237,0.3)" : canSpin
-                          ? "linear-gradient(135deg,#f59e0b,#ef4444)"
-                          : "rgba(255,255,255,0.05)",
-                        color:"#fff", fontSize:"16px", fontWeight:900,
-                        letterSpacing:"1px",
-                        boxShadow: canSpin && !spinning ? "0 6px 28px rgba(245,158,11,0.45), inset 0 1px 0 rgba(255,255,255,0.2)" : "none",
-                        transition:"all 0.2s",
-                        minWidth:"110px",
-                      }}>
-                      {spinning ? "⏳" : balance === 0 ? "💸" : "SPIN"}
+                      whileHover={canSpin?{scale:1.05}:{}} whileTap={canSpin?{scale:0.95}:{}}
+                      style={{padding:"10px 24px",borderRadius:"12px",border:"none",cursor:canSpin?"pointer":"not-allowed",background:spinning?"rgba(124,58,237,0.25)":canSpin?"linear-gradient(135deg,#f59e0b,#ef4444)":"rgba(255,255,255,0.05)",color:"#fff",fontSize:"15px",fontWeight:900,letterSpacing:"1px",boxShadow:canSpin&&!spinning?"0 4px 20px rgba(245,158,11,0.4),inset 0 1px 0 rgba(255,255,255,0.2)":"none",transition:"all 0.2s",minWidth:"90px"}}>
+                      {spinning?"⏳":balance===0?"💸":"SPIN"}
                     </motion.button>
                   </div>
 
                   {balance === 0 && (
-                    <button onClick={() => { setBalance(1000); setHistory([]); setResult(null); }}
-                      style={{ width:"100%", marginTop:"10px", padding:"10px", borderRadius:"12px", border:"1px solid rgba(16,185,129,0.3)", background:"rgba(16,185,129,0.08)", color:"#10b981", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+                    <button onClick={()=>{setBalance(1000);setHistory([]);setResult(null);}}
+                      style={{width:"100%",marginTop:"10px",padding:"9px",borderRadius:"10px",border:"1px solid rgba(16,185,129,0.3)",background:"rgba(16,185,129,0.08)",color:"#10b981",fontSize:"13px",fontWeight:600,cursor:"pointer"}}>
                       ↺ Начать заново · 1000 монет
                     </button>
                   )}
                 </div>
 
                 {/* Right panel */}
-                <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
-                  {/* Result */}
-                  <AnimatePresence mode="wait">
-                    {result && !spinning && (
-                      <motion.div key={result.payout + result.bet + result.type}
-                        initial={{ opacity:0, scale:0.8, y:-10 }}
-                        animate={{ opacity:1, scale:1, y:0 }}
-                        exit={{ opacity:0, scale:0.9 }}
-                        style={{
-                          background: result.type === "lose"
-                            ? "rgba(239,68,68,0.07)"
-                            : result.type === "triple" && result.mult >= 30
-                            ? "rgba(245,158,11,0.12)"
-                            : "rgba(124,58,237,0.1)",
-                          border:`2px solid ${result.type === "lose" ? "rgba(239,68,68,0.25)" : result.mult >= 30 ? "rgba(245,158,11,0.4)" : "rgba(124,58,237,0.3)"}`,
-                          borderRadius:"16px", padding:"16px", textAlign:"center",
-                        }}>
-                        <div style={{ fontSize:"28px", marginBottom:"6px" }}>
-                          {result.type === "lose" ? "💀" : result.mult >= 100 ? "🎊" : result.mult >= 30 ? "🤑" : result.mult >= 10 ? "🔥" : "✨"}
-                        </div>
-                        <div style={{
-                          fontSize:"13px", fontWeight:800, marginBottom:"4px", letterSpacing:"1px",
-                          color: result.type === "lose" ? "#ef4444" : result.mult >= 30 ? "#f59e0b" : "#a78bfa",
-                          animation: result.type !== "lose" ? "glow-win 1s ease-in-out infinite" : "none",
-                        }}>
-                          {result.type === "triple" ? "ТРОЙКА!" : result.type === "pair" ? "ПАРА!" : "ПРОИГРЫШ"}
-                        </div>
-                        {result.payout > 0 ? (
-                          <div style={{ color:"#10b981", fontSize:"20px", fontWeight:900 }}>+{result.payout} 🪙</div>
-                        ) : (
-                          <div style={{ color:"rgba(255,255,255,0.25)", fontSize:"13px" }}>−{result.bet} 🪙</div>
-                        )}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-
-                  {/* Paytable */}
-                  <div style={{ background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:"14px", padding:"12px 14px", flex:1 }}>
-                    <div style={{ color:"rgba(255,255,255,0.25)", fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px", marginBottom:"8px" }}>Выплаты</div>
-                    <div style={{ display:"flex", flexDirection:"column", gap:"3px" }}>
-                      {SYMBOLS.slice(0,8).map((sym, i) => {
-                        const p = PAYOUTS[sym.id];
-                        if (!p || (p.x3 === 0 && p.x2 === 0)) return null;
-                        return (
-                          <div key={sym.id} style={{ display:"flex", alignItems:"center", gap:"6px", padding:"3px 6px", borderRadius:"6px", background: i < 2 ? "rgba(245,158,11,0.06)" : "transparent" }}>
-                            <span style={{ fontSize:"14px", width:"20px", textAlign:"center" }}>{sym.emoji}{sym.emoji}{sym.emoji}</span>
-                            <span style={{ color:sym.color, fontSize:"11px", fontWeight:700, flex:1 }}>×{p.x3}</span>
-                            {p.x2 > 0 && <span style={{ color:"rgba(255,255,255,0.2)", fontSize:"10px" }}>{sym.emoji}{sym.emoji}=×{p.x2}</span>}
+                {showRating ? (
+                  /* Leaderboard */
+                  <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"16px",padding:"14px"}}>
+                    <div style={{color:"#f59e0b",fontSize:"12px",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"10px",textAlign:"center"}}>🏆 Топ игроков</div>
+                    {leaderboard.length === 0 ? (
+                      <div style={{color:"rgba(255,255,255,0.2)",fontSize:"12px",textAlign:"center",padding:"20px"}}>Нет данных</div>
+                    ) : leaderboard.map((e, i) => {
+                      const medals = ["🥇","🥈","🥉"];
+                      const rc = e.avatarColor || "#7c3aed";
+                      return (
+                        <div key={e.id} style={{display:"flex",alignItems:"center",gap:"7px",padding:"7px 8px",borderRadius:"9px",background:i===0?"rgba(245,158,11,0.07)":"transparent",marginBottom:"4px"}}>
+                          <span style={{fontSize:"13px",width:"18px",textAlign:"center"}}>{medals[i]||`${i+1}.`}</span>
+                          <div style={{width:"24px",height:"24px",borderRadius:"7px",background:`linear-gradient(135deg,${rc},${rc}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:e.avatarEmoji?"12px":"10px",fontWeight:700,color:"#fff",flexShrink:0}}>
+                            {e.avatarEmoji||(e.name||"?")[0].toUpperCase()}
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div style={{flex:1,minWidth:0,color:"rgba(255,255,255,0.7)",fontSize:"12px",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{e.name}</div>
+                          <div style={{color:i===0?"#f59e0b":"rgba(255,255,255,0.4)",fontSize:"12px",fontWeight:700,flexShrink:0}}>🪙{e.balance?.toLocaleString()}</div>
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  {/* History */}
-                  {history.length > 0 && (
-                    <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.05)", borderRadius:"12px", padding:"10px 12px" }}>
-                      <div style={{ color:"rgba(255,255,255,0.2)", fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"1px", marginBottom:"6px" }}>История</div>
-                      {history.slice(0,5).map((h,i) => (
-                        <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"3px 0", borderBottom: i<Math.min(history.length,5)-1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
-                          <div style={{ display:"flex", gap:"2px" }}>
-                            {h.finals.map((s,j) => <span key={j} style={{ fontSize:"12px" }}>{s.emoji}</span>)}
+                ) : (
+                  <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+                    {/* Result */}
+                    <AnimatePresence mode="wait">
+                      {result && !spinning && (
+                        <motion.div key={result.payout+result.bet+result.type}
+                          initial={{opacity:0,scale:0.85,y:-8}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.9}}
+                          style={{background:result.type==="lose"?"rgba(239,68,68,0.07)":result.mult>=30?"rgba(245,158,11,0.1)":"rgba(124,58,237,0.09)",border:`2px solid ${result.type==="lose"?"rgba(239,68,68,0.22)":result.mult>=30?"rgba(245,158,11,0.4)":"rgba(124,58,237,0.3)"}`,borderRadius:"14px",padding:"14px",textAlign:"center"}}>
+                          <div style={{fontSize:"26px",marginBottom:"5px"}}>
+                            {result.type==="lose"?"💀":result.mult>=100?"🎊":result.mult>=30?"🤑":result.mult>=10?"🔥":"✨"}
                           </div>
-                          <span style={{ color: h.payout > 0 ? "#10b981" : "#ef4444", fontSize:"12px", fontWeight:700 }}>
-                            {h.payout > 0 ? `+${h.payout}` : `-${h.bet}`}
-                          </span>
-                        </div>
-                      ))}
+                          <div style={{fontSize:"13px",fontWeight:800,letterSpacing:"1px",marginBottom:"4px",color:result.type==="lose"?"#ef4444":result.mult>=30?"#f59e0b":"#a78bfa"}}>
+                            {result.type==="triple"?"ТРОЙКА!":result.type==="pair"?"ПАРА!":"ПРОИГРЫШ"}
+                          </div>
+                          {result.payout>0
+                            ? <div style={{color:"#10b981",fontSize:"19px",fontWeight:900}}>+{result.payout} 🪙</div>
+                            : <div style={{color:"rgba(255,255,255,0.2)",fontSize:"13px"}}>−{result.bet} 🪙</div>
+                          }
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Paytable — fixed: emoji and multiplier separated */}
+                    <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.06)",borderRadius:"14px",padding:"12px",flex:1}}>
+                      <div style={{color:"rgba(255,255,255,0.25)",fontSize:"10px",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"8px"}}>Выплаты (ставка × коэф.)</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+                        {SYMBOLS.map((sym) => {
+                          const p = PAYOUTS[sym.id];
+                          if (!p || (p.x3===0&&p.x2===0)) return null;
+                          return (
+                            <div key={sym.id} style={{display:"grid",gridTemplateColumns:"60px 1fr",alignItems:"center",gap:"6px",padding:"3px 4px",borderRadius:"6px"}}>
+                              {/* Emoji row — separated from text */}
+                              <div style={{display:"flex",gap:"1px"}}>
+                                <span style={{fontSize:"14px",lineHeight:1}}>{sym.emoji}</span>
+                                <span style={{fontSize:"14px",lineHeight:1}}>{sym.emoji}</span>
+                                <span style={{fontSize:"14px",lineHeight:1}}>{sym.emoji}</span>
+                              </div>
+                              {/* Multipliers */}
+                              <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                                <span style={{color:sym.color,fontSize:"11px",fontWeight:800}}>×{p.x3}</span>
+                                {p.x2>0&&<span style={{color:"rgba(255,255,255,0.25)",fontSize:"10px"}}>{sym.emoji}{sym.emoji}=×{p.x2}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    {/* History */}
+                    {history.length>0&&(
+                      <div style={{background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.05)",borderRadius:"12px",padding:"10px"}}>
+                        <div style={{color:"rgba(255,255,255,0.2)",fontSize:"10px",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:"6px"}}>История</div>
+                        {history.slice(0,5).map((h,i)=>(
+                          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0",borderBottom:i<Math.min(history.length,5)-1?"1px solid rgba(255,255,255,0.04)":"none"}}>
+                            <div style={{display:"flex",gap:"2px"}}>
+                              {h.finals.map((s,j)=><span key={j} style={{fontSize:"13px"}}>{s.emoji}</span>)}
+                            </div>
+                            <span style={{color:h.payout>0?"#10b981":"#ef4444",fontSize:"12px",fontWeight:700}}>
+                              {h.payout>0?`+${h.payout}`:`-${h.bet}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
