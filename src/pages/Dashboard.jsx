@@ -582,6 +582,379 @@ const TIPS = {
   week:   "Суммарное число подтверждённых Reddit-публикаций за последние 7 дней по всем моделям.",
 };
 
+// ─── ROULETTE ─────────────────────────────────────────────────────────────────
+function RouletteWheel({ users, t }) {
+  const canvasRef = useRef(null);
+  const [items, setItems] = useState([]);
+  const [customInput, setCustomInput] = useState("");
+  const [spinning, setSpinning] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const spinRef = useRef({ angle: 0, velocity: 0, target: 0, spinning: false });
+  const rafRef = useRef(null);
+  const confettiRef = useRef([]);
+
+  const SEGMENT_COLORS = [
+    "#7c3aed","#db2877","#0ea5e9","#10b981","#f59e0b",
+    "#8b5cf6","#06b6d4","#f97316","#84cc16","#ec4899",
+    "#6366f1","#14b8a6","#ef4444","#a855f7","#3b82f6",
+  ];
+
+  // Init with team members
+  useEffect(() => {
+    if (users.length > 0 && items.length === 0) {
+      setItems(users.slice(0, 10).map((u, i) => ({
+        id: u.id,
+        label: u.name || "—",
+        emoji: u.avatarEmoji || "",
+        color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+      })));
+    }
+  }, [users]);
+
+  // Draw wheel
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || items.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const SIZE = 320;
+    canvas.width  = SIZE * dpr;
+    canvas.height = SIZE * dpr;
+    canvas.style.width  = SIZE + "px";
+    canvas.style.height = SIZE + "px";
+    ctx.scale(dpr, dpr);
+
+    const draw = (angle) => {
+      const cx = SIZE / 2, cy = SIZE / 2, r = SIZE / 2 - 10;
+      ctx.clearRect(0, 0, SIZE, SIZE);
+
+      const seg = (Math.PI * 2) / items.length;
+
+      // Outer glow
+      const glow = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r + 10);
+      glow.addColorStop(0, "rgba(124,58,237,0)");
+      glow.addColorStop(1, "rgba(124,58,237,0.15)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Segments
+      items.forEach((item, i) => {
+        const start = angle + i * seg - Math.PI / 2;
+        const end   = start + seg;
+        const mid   = start + seg / 2;
+
+        // Segment
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, end);
+        ctx.closePath();
+        ctx.fillStyle = item.color;
+        ctx.fill();
+
+        // Segment border
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, end);
+        ctx.closePath();
+        ctx.strokeStyle = "rgba(0,0,0,0.25)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Shine overlay
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, r, start, end);
+        ctx.closePath();
+        const shine = ctx.createRadialGradient(
+          cx + Math.cos(mid) * r * 0.4, cy + Math.sin(mid) * r * 0.4, 0,
+          cx + Math.cos(mid) * r * 0.4, cy + Math.sin(mid) * r * 0.4, r * 0.5
+        );
+        shine.addColorStop(0, "rgba(255,255,255,0.15)");
+        shine.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = shine;
+        ctx.fill();
+
+        // Text
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(mid);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#fff";
+        ctx.font = `bold ${items.length > 8 ? 11 : 13}px Inter, sans-serif`;
+        ctx.shadowColor = "rgba(0,0,0,0.5)";
+        ctx.shadowBlur = 4;
+
+        const textR = r * 0.75;
+        const label = item.emoji ? `${item.emoji} ${item.label}` : item.label;
+        const maxLen = 12;
+        const display = label.length > maxLen ? label.slice(0, maxLen) + "…" : label;
+        ctx.fillText(display, textR, 5);
+        ctx.restore();
+      });
+
+      // Center circle
+      ctx.beginPath();
+      ctx.arc(cx, cy, 22, 0, Math.PI * 2);
+      const centerGrad = ctx.createRadialGradient(cx - 5, cy - 5, 2, cx, cy, 22);
+      centerGrad.addColorStop(0, "#a78bfa");
+      centerGrad.addColorStop(1, "#6d28d9");
+      ctx.fillStyle = centerGrad;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.3)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Center emoji
+      ctx.font = "16px serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("🎰", cx, cy);
+
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255,255,255,0.1)";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+    };
+
+    // Pointer
+    const drawPointer = () => {
+      const SIZE = 320;
+      const cx = SIZE / 2;
+      ctx.save();
+      ctx.translate(cx, 10);
+      ctx.beginPath();
+      ctx.moveTo(-12, 0);
+      ctx.lineTo(12, 0);
+      ctx.lineTo(0, 28);
+      ctx.closePath();
+      const pGrad = ctx.createLinearGradient(0, 0, 0, 28);
+      pGrad.addColorStop(0, "#f59e0b");
+      pGrad.addColorStop(1, "#ef4444");
+      ctx.fillStyle = pGrad;
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    if (!spinRef.current.spinning) {
+      draw(spinRef.current.angle);
+      drawPointer();
+      return;
+    }
+
+    let alive = true;
+    const loop = () => {
+      if (!alive) return;
+      const s = spinRef.current;
+      s.velocity *= 0.985;
+      s.angle += s.velocity;
+
+      draw(s.angle);
+      drawPointer();
+
+      if (s.velocity > 0.001) {
+        rafRef.current = requestAnimationFrame(loop);
+      } else {
+        s.spinning = false;
+        setSpinning(false);
+
+        // Find winner
+        const seg = (Math.PI * 2) / items.length;
+        const norm = (((-s.angle % (Math.PI * 2)) + Math.PI / 2) + Math.PI * 2) % (Math.PI * 2);
+        const idx = Math.floor(norm / seg) % items.length;
+        const w = items[idx];
+        setWinner(w);
+
+        // Confetti
+        confettiRef.current = Array.from({ length: 80 }, () => ({
+          x: Math.random() * window.innerWidth,
+          y: -10 - Math.random() * 100,
+          vx: (Math.random() - 0.5) * 4,
+          vy: 2 + Math.random() * 4,
+          r: 4 + Math.random() * 6,
+          color: SEGMENT_COLORS[Math.floor(Math.random() * SEGMENT_COLORS.length)],
+          rot: Math.random() * Math.PI * 2,
+          rotV: (Math.random() - 0.5) * 0.2,
+        }));
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 3500);
+      }
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => { alive = false; cancelAnimationFrame(rafRef.current); };
+  }, [items, spinning]);
+
+  const spin = () => {
+    if (spinning || items.length < 2) return;
+    setWinner(null);
+    spinRef.current.spinning = true;
+    spinRef.current.velocity = 0.25 + Math.random() * 0.2;
+    setSpinning(true);
+  };
+
+  const addItem = () => {
+    if (!customInput.trim() || items.length >= 15) return;
+    setItems(prev => [...prev, {
+      id: Date.now().toString(),
+      label: customInput.trim(),
+      emoji: "",
+      color: SEGMENT_COLORS[prev.length % SEGMENT_COLORS.length],
+    }]);
+    setCustomInput("");
+  };
+
+  const removeItem = (id) => setItems(prev => prev.filter(i => i.id !== id));
+  const resetToTeam = () => {
+    setItems(users.slice(0, 10).map((u, i) => ({
+      id: u.id, label: u.name || "—", emoji: u.avatarEmoji || "",
+      color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+    })));
+    setWinner(null);
+  };
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: "28px", alignItems: "start" }}>
+      {/* Wheel */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
+        <div style={{ position: "relative" }}>
+          <canvas ref={canvasRef} style={{ display: "block", filter: spinning ? "drop-shadow(0 0 20px rgba(124,58,237,0.5))" : "drop-shadow(0 4px 12px rgba(0,0,0,0.3))", transition: "filter 0.3s" }} />
+        </div>
+
+        <motion.button onClick={spin} disabled={spinning || items.length < 2}
+          whileHover={!spinning ? { scale: 1.05 } : {}}
+          whileTap={!spinning ? { scale: 0.95 } : {}}
+          style={{ padding: "13px 40px", borderRadius: "50px", border: "none", cursor: spinning || items.length < 2 ? "not-allowed" : "pointer", background: spinning ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", fontSize: "16px", fontWeight: 700, boxShadow: spinning ? "none" : "0 4px 20px rgba(124,58,237,0.4)" }}>
+          {spinning ? "⏳ Крутится..." : "🎰 Крутить!"}
+        </motion.button>
+
+        {/* Winner */}
+        <AnimatePresence>
+          {winner && !spinning && (
+            <motion.div initial={{ opacity: 0, scale: 0.8, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0 }}
+              style={{ background: `${winner.color}20`, border: `2px solid ${winner.color}60`, borderRadius: "16px", padding: "16px 24px", textAlign: "center", width: "100%" }}>
+              <div style={{ fontSize: "28px", marginBottom: "6px" }}>{winner.emoji || "🎉"}</div>
+              <div style={{ color: winner.color, fontSize: "20px", fontWeight: 800 }}>{winner.label}</div>
+              <div style={{ color: t.textMuted, fontSize: "12px", marginTop: "4px" }}>Победитель!</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Controls */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+          <span style={{ color: t.textMuted, fontSize: "13px", fontWeight: 600 }}>Участники ({items.length}/15)</span>
+          <button onClick={resetToTeam}
+            style={{ background: "none", border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "8px", padding: "5px 12px", fontSize: "12px", cursor: "pointer" }}>
+            ↺ Сброс команды
+          </button>
+        </div>
+
+        {/* Items list */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "14px", maxHeight: "280px", overflowY: "auto" }}>
+          {items.map((item, i) => (
+            <div key={item.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "8px 12px", background: t.bgCardHover, borderRadius: "10px", border: `1px solid ${t.border}` }}>
+              <div style={{ width: "12px", height: "12px", borderRadius: "3px", background: item.color, flexShrink: 0 }} />
+              <span style={{ color: t.text, fontSize: "13px", flex: 1 }}>{item.emoji} {item.label}</span>
+              <button onClick={() => removeItem(item.id)}
+                style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "2px", lineHeight: 1, fontSize: "16px" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add custom */}
+        {items.length < 15 && (
+          <div style={{ display: "flex", gap: "8px" }}>
+            <input value={customInput} onChange={e => setCustomInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addItem()}
+              placeholder="Добавить участника..."
+              style={{ flex: 1, background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "9px 12px", fontSize: "13px", outline: "none", fontFamily: "inherit" }} />
+            <button onClick={addItem} disabled={!customInput.trim()}
+              style={{ background: customInput.trim() ? "linear-gradient(135deg, #7c3aed, #db2877)" : "rgba(124,58,237,0.2)", color: "#fff", border: "none", borderRadius: "10px", padding: "9px 16px", fontSize: "13px", fontWeight: 600, cursor: customInput.trim() ? "pointer" : "not-allowed" }}>
+              + Добавить
+            </button>
+          </div>
+        )}
+
+        <div style={{ marginTop: "16px", padding: "12px 14px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "10px" }}>
+          <div style={{ color: "#a78bfa", fontSize: "12px", lineHeight: "1.6" }}>
+            💡 Используй рулетку чтобы выбрать кто первый пишет отчёт, кому достаётся задача или кто сегодня выбирает музыку
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Confetti overlay
+function ConfettiOverlay({ active, items }) {
+  const canvasRef = useRef(null);
+  const pieces = useRef([]);
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    if (!active) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const COLORS = ["#7c3aed","#db2877","#f59e0b","#10b981","#0ea5e9","#f97316","#a78bfa","#fbbf24"];
+    pieces.current = Array.from({ length: 120 }, () => ({
+      x: Math.random() * canvas.width,
+      y: -20 - Math.random() * 80,
+      vx: (Math.random() - 0.5) * 6,
+      vy: 3 + Math.random() * 5,
+      w: 8 + Math.random() * 10,
+      h: 4 + Math.random() * 6,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      rot: Math.random() * Math.PI * 2,
+      rotV: (Math.random() - 0.5) * 0.15,
+      opacity: 1,
+    }));
+
+    let alive = true;
+    const loop = () => {
+      if (!alive) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pieces.current.forEach(p => {
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vy += 0.12;
+        p.rot += p.rotV;
+        if (p.y > canvas.height * 0.7) p.opacity -= 0.02;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      });
+      pieces.current = pieces.current.filter(p => p.opacity > 0);
+      if (pieces.current.length > 0) rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => { alive = false; cancelAnimationFrame(rafRef.current); };
+  }, [active]);
+
+  if (!active) return null;
+  return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 9000 }} />;
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 const cardV = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 const contV = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
@@ -594,6 +967,7 @@ export default function Dashboard() {
   const [models,    setModels]    = useState([]);
   const [tasks,     setTasks]     = useState([]);
   const [grid,      setGrid]      = useState([]);
+  const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
 
   const isAdmin = [ROLES.OWNER, ROLES.ADMIN].includes(profile?.role);
@@ -605,6 +979,7 @@ export default function Dashboard() {
       onSnapshot(collection(db, "models"),       snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "tasks"),        snap => setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "content_grid"), snap => setGrid(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "users"),        snap => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
@@ -658,6 +1033,7 @@ export default function Dashboard() {
   return (
     <div style={{ position: "relative" }}>
       <LiveBackground />
+      <ConfettiOverlay active={false} />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: "28px" }}>
         <h1 style={{ fontSize: "26px", fontWeight: 700, color: t.text, marginBottom: "6px" }}>
@@ -847,6 +1223,17 @@ export default function Dashboard() {
           </div>
         </div>
         <DinoGame profile={profile} db={db} user={user} />
+      </motion.div>
+
+      {/* Рулетка */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
+        style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
+          <span style={{ fontSize: "20px" }}>🎰</span>
+          <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Рулетка команды</h3>
+          <Tooltip text="Крути колесо — выбирает случайного участника команды. Можно добавить своих игроков." />
+        </div>
+        <RouletteWheel users={users} t={t} />
       </motion.div>
     </div>
   );
