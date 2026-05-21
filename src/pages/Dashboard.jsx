@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import LiveBackground from "../components/LiveBackground";
 import {
   collection, onSnapshot, orderBy, query, limit,
@@ -1225,16 +1225,6 @@ export default function Dashboard() {
         <DinoGame profile={profile} db={db} user={user} />
       </motion.div>
 
-      {/* Рулетка */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}
-        style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "20px" }}>
-          <span style={{ fontSize: "20px" }}>🎰</span>
-          <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Рулетка команды</h3>
-          <Tooltip text="Крути колесо — выбирает случайного участника команды. Можно добавить своих игроков." />
-        </div>
-        <RouletteWheel users={users} t={t} />
-      </motion.div>
     </div>
   );
 }

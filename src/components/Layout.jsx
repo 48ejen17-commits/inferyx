@@ -36,6 +36,278 @@ const NAV = [
   { to: "/settings", icon: Settings, label: "Настройки" },
 ];
 
+// ── Secret Roulette ───────────────────────────────────────────────────────────
+const SEG_COLORS = [
+  "#7c3aed","#db2877","#0ea5e9","#10b981","#f59e0b",
+  "#8b5cf6","#06b6d4","#f97316","#84cc16","#ec4899",
+];
+
+function SecretRoulette({ users, t }) {
+  const [open, setOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [items, setItems] = useState([]);
+  const [customInput, setCustomInput] = useState("");
+  const [spinning, setSpinning] = useState(false);
+  const [winner, setWinner] = useState(null);
+  const canvasRef = useRef(null);
+  const spinRef = useRef({ angle: 0, velocity: 0 });
+  const rafRef = useRef(null);
+  const confRef = useRef([]);
+  const [confActive, setConfActive] = useState(false);
+  const confCanvasRef = useRef(null);
+
+  useEffect(() => {
+    if (users.length > 0 && items.length === 0) {
+      setItems(users.slice(0, 12).map((u, i) => ({
+        id: u.id, label: u.name || "—", emoji: u.avatarEmoji || "",
+        color: SEG_COLORS[i % SEG_COLORS.length],
+      })));
+    }
+  }, [users]);
+
+  const draw = (angle) => {
+    const canvas = canvasRef.current;
+    if (!canvas || items.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    const S = 300, cx = S/2, cy = S/2, r = S/2 - 8;
+    ctx.clearRect(0, 0, S, S);
+    const seg = (Math.PI*2) / items.length;
+
+    items.forEach((item, i) => {
+      const start = angle + i*seg - Math.PI/2;
+      const end = start + seg;
+      const mid = start + seg/2;
+
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, end); ctx.closePath();
+      ctx.fillStyle = item.color; ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+      // shine
+      ctx.beginPath(); ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, r, start, end); ctx.closePath();
+      const sh = ctx.createRadialGradient(cx+Math.cos(mid)*r*0.4, cy+Math.sin(mid)*r*0.4, 0, cx+Math.cos(mid)*r*0.4, cy+Math.sin(mid)*r*0.4, r*0.5);
+      sh.addColorStop(0,"rgba(255,255,255,0.18)"); sh.addColorStop(1,"rgba(255,255,255,0)");
+      ctx.fillStyle = sh; ctx.fill();
+
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(mid); ctx.textAlign = "right";
+      ctx.fillStyle = "#fff"; ctx.font = `bold ${items.length > 8 ? 10 : 12}px Inter,sans-serif`;
+      ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 3;
+      const label = (item.emoji ? item.emoji+" " : "") + item.label;
+      ctx.fillText(label.length > 13 ? label.slice(0,13)+"…" : label, r*0.8, 4);
+      ctx.restore();
+    });
+
+    // center
+    ctx.beginPath(); ctx.arc(cx, cy, 20, 0, Math.PI*2);
+    const cg = ctx.createRadialGradient(cx-4,cy-4,2,cx,cy,20);
+    cg.addColorStop(0,"#a78bfa"); cg.addColorStop(1,"#6d28d9");
+    ctx.fillStyle = cg; ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = "14px serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.shadowBlur = 0; ctx.fillText("🎰", cx, cy);
+
+    // pointer
+    ctx.save(); ctx.translate(cx, 8);
+    ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(10,0); ctx.lineTo(0,24); ctx.closePath();
+    const pg = ctx.createLinearGradient(0,0,0,24);
+    pg.addColorStop(0,"#f59e0b"); pg.addColorStop(1,"#ef4444");
+    ctx.fillStyle = pg; ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+  };
+
+  useEffect(() => { if (open) setTimeout(() => draw(spinRef.current.angle), 50); }, [open, items]);
+
+  const spin = () => {
+    if (spinning || items.length < 2) return;
+    setWinner(null); setSpinning(true);
+    spinRef.current.velocity = 0.22 + Math.random() * 0.18;
+    let alive = true;
+    const loop = () => {
+      if (!alive) return;
+      spinRef.current.velocity *= 0.986;
+      spinRef.current.angle += spinRef.current.velocity;
+      draw(spinRef.current.angle);
+      if (spinRef.current.velocity > 0.003) {
+        rafRef.current = requestAnimationFrame(loop);
+      } else {
+        setSpinning(false);
+        const seg = (Math.PI*2) / items.length;
+        const norm = (((-spinRef.current.angle % (Math.PI*2)) + Math.PI/2) + Math.PI*2) % (Math.PI*2);
+        const idx = Math.floor(norm / seg) % items.length;
+        setWinner(items[idx]);
+        // confetti
+        confRef.current = Array.from({length:100}, () => ({
+          x: Math.random()*window.innerWidth, y: -20-Math.random()*60,
+          vx: (Math.random()-0.5)*7, vy: 2+Math.random()*5,
+          w: 8+Math.random()*8, h: 4+Math.random()*5,
+          color: SEG_COLORS[Math.floor(Math.random()*SEG_COLORS.length)],
+          rot: Math.random()*Math.PI*2, rotV: (Math.random()-0.5)*0.18, opacity: 1,
+        }));
+        setConfActive(true);
+        setTimeout(() => setConfActive(false), 3500);
+      }
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => { alive = false; };
+  };
+
+  // Confetti canvas
+  useEffect(() => {
+    if (!confActive) return;
+    const canvas = confCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    let alive = true;
+    const loop = () => {
+      if (!alive) return;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      confRef.current.forEach(p => {
+        p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.rot+=p.rotV;
+        if (p.y > canvas.height*0.75) p.opacity -= 0.025;
+        ctx.save(); ctx.globalAlpha = Math.max(0,p.opacity);
+        ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+        ctx.fillStyle = p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        ctx.restore();
+      });
+      confRef.current = confRef.current.filter(p => p.opacity > 0);
+      if (confRef.current.length > 0) requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+    return () => { alive = false; };
+  }, [confActive]);
+
+  const addItem = () => {
+    if (!customInput.trim() || items.length >= 15) return;
+    setItems(p => [...p, { id: Date.now()+"", label: customInput.trim(), emoji: "", color: SEG_COLORS[p.length % SEG_COLORS.length] }]);
+    setCustomInput("");
+  };
+
+  const th = t || {};
+  const bgCard = th.bgCard || "rgba(15,12,35,0.95)";
+  const border = th.border || "rgba(124,58,237,0.25)";
+  const text = th.text || "#e2e8f0";
+  const textMuted = th.textMuted || "#64748b";
+  const bgHover = th.bgCardHover || "rgba(255,255,255,0.06)";
+  const bgInput = th.bgInput || "rgba(255,255,255,0.05)";
+
+  return (
+    <>
+      {/* Confetti overlay */}
+      {confActive && <canvas ref={confCanvasRef} style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:9999 }} />}
+
+      {/* Secret trigger — thin strip on right edge */}
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onClick={() => { setOpen(true); setWinner(null); }}
+        style={{
+          position: "fixed", right: 0, top: "50%", transform: "translateY(-50%)",
+          width: hovered ? "42px" : "6px",
+          height: "80px", borderRadius: "12px 0 0 12px",
+          background: hovered
+            ? "linear-gradient(135deg, #7c3aed, #db2877)"
+            : "rgba(124,58,237,0.25)",
+          cursor: "pointer", zIndex: 500,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          transition: "all 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+          boxShadow: hovered ? "0 0 20px rgba(124,58,237,0.5)" : "none",
+          overflow: "hidden",
+        }}>
+        {hovered && <span style={{ fontSize: "20px", userSelect: "none" }}>🎰</span>}
+      </div>
+
+      {/* Modal */}
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            onClick={() => setOpen(false)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:600, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
+            <motion.div initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
+              transition={{ type:"spring", stiffness:300, damping:25 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background:"linear-gradient(135deg, #0f0b24, #1a0f35)", border:`1px solid ${border}`, borderRadius:"24px", padding:"28px", width:"100%", maxWidth:"720px", boxShadow:"0 32px 80px rgba(0,0,0,0.7)", display:"grid", gridTemplateColumns:"320px 1fr", gap:"28px", alignItems:"start" }}>
+
+              {/* Wheel side */}
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", width:"100%" }}>
+                  <span style={{ color:text, fontSize:"16px", fontWeight:700 }}>🎰 Рулетка</span>
+                  <button onClick={() => setOpen(false)} style={{ background:"none", border:"none", color:textMuted, cursor:"pointer", fontSize:"20px", lineHeight:1 }}>×</button>
+                </div>
+
+                <canvas ref={canvasRef} width={300} height={300}
+                  style={{ borderRadius:"50%", boxShadow: spinning ? "0 0 30px rgba(124,58,237,0.6)" : "0 8px 30px rgba(0,0,0,0.4)", transition:"box-shadow 0.3s" }} />
+
+                <motion.button onClick={spin} disabled={spinning || items.length < 2}
+                  whileHover={!spinning ? { scale:1.05 } : {}} whileTap={!spinning ? { scale:0.95 } : {}}
+                  style={{ padding:"12px 36px", borderRadius:"50px", border:"none", cursor: spinning || items.length < 2 ? "not-allowed" : "pointer", background: spinning ? "rgba(124,58,237,0.3)" : "linear-gradient(135deg,#7c3aed,#db2877)", color:"#fff", fontSize:"16px", fontWeight:700, boxShadow: spinning ? "none" : "0 4px 20px rgba(124,58,237,0.4)" }}>
+                  {spinning ? "⏳ Крутится..." : "Крутить!"}
+                </motion.button>
+
+                <AnimatePresence>
+                  {winner && !spinning && (
+                    <motion.div initial={{ opacity:0, scale:0.8 }} animate={{ opacity:1, scale:1 }} exit={{ opacity:0 }}
+                      style={{ background:`${winner.color}22`, border:`2px solid ${winner.color}55`, borderRadius:"14px", padding:"14px 20px", textAlign:"center", width:"100%" }}>
+                      <div style={{ fontSize:"26px", marginBottom:"4px" }}>{winner.emoji || "🎉"}</div>
+                      <div style={{ color:winner.color, fontSize:"20px", fontWeight:800 }}>{winner.label}</div>
+                      <div style={{ color:textMuted, fontSize:"11px", marginTop:"3px" }}>Победитель!</div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Controls side */}
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
+                  <span style={{ color:textMuted, fontSize:"12px", fontWeight:600 }}>Участники ({items.length}/15)</span>
+                  <button onClick={() => { setItems(users.slice(0,12).map((u,i)=>({ id:u.id, label:u.name||"—", emoji:u.avatarEmoji||"", color:SEG_COLORS[i%SEG_COLORS.length] }))); setWinner(null); }}
+                    style={{ background:"none", border:`1px solid ${border}`, color:textMuted, borderRadius:"7px", padding:"4px 10px", fontSize:"11px", cursor:"pointer" }}>
+                    ↺ Сброс
+                  </button>
+                </div>
+
+                <div style={{ display:"flex", flexDirection:"column", gap:"5px", maxHeight:"280px", overflowY:"auto", marginBottom:"12px" }}>
+                  {items.map((item) => (
+                    <div key={item.id} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"7px 10px", background:bgHover, borderRadius:"9px" }}>
+                      <div style={{ width:"10px", height:"10px", borderRadius:"3px", background:item.color, flexShrink:0 }} />
+                      <span style={{ color:text, fontSize:"12px", flex:1 }}>{item.emoji} {item.label}</span>
+                      <button onClick={() => setItems(p => p.filter(i => i.id !== item.id))}
+                        style={{ background:"none", border:"none", color:textMuted, cursor:"pointer", fontSize:"16px", lineHeight:1, padding:"0 2px" }}
+                        onMouseEnter={e => e.currentTarget.style.color="#ef4444"}
+                        onMouseLeave={e => e.currentTarget.style.color=textMuted}>×</button>
+                    </div>
+                  ))}
+                </div>
+
+                {items.length < 15 && (
+                  <div style={{ display:"flex", gap:"7px" }}>
+                    <input value={customInput} onChange={e => setCustomInput(e.target.value)}
+                      onKeyDown={e => e.key==="Enter" && addItem()}
+                      placeholder="Добавить участника..."
+                      style={{ flex:1, background:bgInput, color:text, border:`1px solid ${border}`, borderRadius:"9px", padding:"8px 11px", fontSize:"12px", outline:"none", fontFamily:"inherit" }} />
+                    <button onClick={addItem} disabled={!customInput.trim()}
+                      style={{ background: customInput.trim() ? "rgba(124,58,237,0.3)" : "rgba(124,58,237,0.1)", border:`1px solid ${border}`, color:"#a78bfa", borderRadius:"9px", padding:"8px 14px", fontSize:"12px", fontWeight:600, cursor: customInput.trim() ? "pointer" : "not-allowed" }}>
+                      +
+                    </button>
+                  </div>
+                )}
+
+                <div style={{ marginTop:"14px", padding:"10px 12px", background:"rgba(124,58,237,0.07)", border:"1px solid rgba(124,58,237,0.15)", borderRadius:"10px" }}>
+                  <div style={{ color:"#a78bfa", fontSize:"11px", lineHeight:"1.6" }}>
+                    💡 Кто пишет отчёт? Кому задача? Кто выбирает музыку? Крути!
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
+
 export default function Layout({ children }) {
   const { profile, logout, user, db } = useAuth();
   const { mode, toggle, theme } = useTheme();
@@ -43,6 +315,7 @@ export default function Layout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [liveProfile, setLiveProfile] = useState(null);
+  const [allUsers, setAllUsers] = useState([]);
   const [showNotif, setShowNotif] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -95,8 +368,10 @@ export default function Layout({ children }) {
   useEffect(() => {
     if (!user?.uid || !db) return;
     const unsub = onSnapshot(collection(db, "users"), snap => {
-      const found = snap.docs.find(d => d.data().uid === user.uid || d.id === user.uid);
-      if (found) setLiveProfile(found.data());
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setAllUsers(docs);
+      const found = docs.find(d => d.uid === user.uid || d.id === user.uid);
+      if (found) setLiveProfile(found);
     });
     return () => unsub();
   }, [db, user?.uid]);
@@ -389,6 +664,8 @@ export default function Layout({ children }) {
         </motion.div>
       </div>
 
+      {/* 🎰 Secret roulette trigger */}
+      <SecretRoulette users={allUsers} t={t} />
     </div>
   );
 }
