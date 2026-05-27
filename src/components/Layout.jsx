@@ -594,85 +594,122 @@ function SecretSlots({ t }) {
 
 // ── Logo Easter Egg ───────────────────────────────────────────────────────────
 function LogoEasterEgg() {
-  const [cat, setCat] = useState(false);
-  const [meow, setMeow] = useState(false);
-  const [clicks, setClicks] = useState(0);
+  const [horns, setHorns] = useState(false);
+  const [phrase, setPhrase] = useState("");
+  const [showPhrase, setShowPhrase] = useState(false);
+  const timerRef = useRef(null);
+  const phraseTimerRef = useRef(null);
+
+  const PHRASES = [
+    // Мотивашки
+    "Ты сильнее чем думаешь 💪",
+    "Сегодня твой день 🔥",
+    "Ещё один пост — ещё один шаг 🚀",
+    "Работай пока они спят 🌙",
+    "Успех любит настойчивых ⚡",
+    "Каждый пост считается 📈",
+    "Ты на правильном пути ✅",
+    "Не останавливайся сейчас 🏆",
+    "Маленькие шаги — большие результаты 🎯",
+    "Верь в процесс 🧠",
+    // Юмор
+    "Кофе сам себя не нальёт ☕",
+    "Это не баг, это фича 🐛",
+    "Ещё пять минут... уже три часа 😅",
+    "Ctrl+Z к сожалению не работает в жизни",
+    "404: мотивация не найдена 🔍",
+    "Работаем или делаем вид? 👀",
+    "Дедлайн — лучшая мотивация 💀",
+    "Главное — не заснуть на смене 😴",
+    "Ты это можешь. Наверное. 🤷",
+    "Почему всё работает? Не трогай 🙏",
+    "Сначала кофе, потом вопросы ☕",
+    "Я не прокрастинирую, я думаю 🤔",
+    "Баг или особенность — вопрос философский",
+    "Осталось только нажать кнопку... 🔴",
+    "Продуктивность: 10% работа, 90% вкладки 😂",
+    // Рабочие
+    "Проверь план на сегодня 📋",
+    "Как дела у команды? 👥",
+    "Не забудь отметить посты ✅",
+    "Синхронизируйся с тим-лидом 🔄",
+    "Время = деньги. Вперёд! 💰",
+    "Отдохнул? Теперь работай 😈",
+    "Командный дух решает всё 🤝",
+    // Философия
+    "Всё будет хорошо. Или нет. Но скорее да 🌈",
+    "Жизнь слишком коротка для скучной работы ✨",
+    "Делай что любишь или люби что делаешь",
+    "Инфертикс — не просто платформа, это стиль 😎",
+  ];
 
   const handleClick = () => {
-    setCat(true);
-    setMeow(true);
-    setClicks(c => c + 1);
+    const random = PHRASES[Math.floor(Math.random() * PHRASES.length)];
+    setPhrase(random);
+    setHorns(true);
+    setShowPhrase(true);
 
-    // Play meow sound
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const playTone = (freq, start, dur, type = "sine", vol = 0.3) => {
-        const osc = ctx.createOscillator();
-        const g   = ctx.createGain();
-        osc.connect(g); g.connect(ctx.destination);
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, ctx.currentTime + start + dur * 0.3);
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.9, ctx.currentTime + start + dur);
-        g.gain.setValueAtTime(0, ctx.currentTime + start);
-        g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
-        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
-        osc.start(ctx.currentTime + start);
-        osc.stop(ctx.currentTime + start + dur + 0.05);
-      };
-      playTone(600, 0,    0.12, "sine", 0.25);
-      playTone(900, 0.1,  0.18, "sine", 0.2);
-      playTone(700, 0.22, 0.25, "sine", 0.15);
-    } catch {}
+    clearTimeout(timerRef.current);
+    clearTimeout(phraseTimerRef.current);
 
-    setTimeout(() => { setCat(false); setMeow(false); }, 1200);
+    timerRef.current = setTimeout(() => setHorns(false), 2000);
+    phraseTimerRef.current = setTimeout(() => setShowPhrase(false), 2500);
   };
 
-  // Special messages after many clicks
-  const msgs = ["Мяу!", "Мяяяу!", "МЯУ!!", "Пурр~", "Мяу-мяу!", "Ладно, хватит 😾"];
-  const msg  = msgs[Math.min(clicks - 1, msgs.length - 1)] || "Мяу!";
+  useEffect(() => () => {
+    clearTimeout(timerRef.current);
+    clearTimeout(phraseTimerRef.current);
+  }, []);
 
   return (
-    <div style={{ display: "flex", alignItems: "baseline", gap: "5px", position: "relative" }}>
-      <motion.div
-        onClick={handleClick}
-        whileTap={{ scale: 0.88 }}
-        style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px" }}>
+    <motion.div
+      onClick={handleClick}
+      whileTap={{ scale: 0.92 }}
+      style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px", position: "relative" }}>
 
-        {/* Logo text — switches to cat on click */}
-        <motion.div
-          animate={cat ? { scale: [1, 1.15, 1] } : {}}
-          transition={{ duration: 0.3 }}
-          style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: cat ? "linear-gradient(135deg, #f59e0b, #fb923c)" : "linear-gradient(135deg, #7c3aed, #db2877)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: cat ? "none" : "shimmer 4s linear infinite", transition: "background 0.2s" }}>
-          {cat ? "🐱NFERYX" : "INFERYX"}
-        </motion.div>
-
-        <span style={{ fontSize: "10px", fontWeight: 700, color: cat ? "#f59e0b" : "#475569", letterSpacing: "0.5px", transition: "color 0.2s" }}>
-          {cat ? "😸" : "v3.0"}
-        </span>
-      </motion.div>
-
-      {/* Meow popup */}
+      {/* Рожки */}
       <AnimatePresence>
-        {meow && (
+        {horns && (
           <motion.div
-            initial={{ opacity: 0, y: 4, scale: 0.8 }}
-            animate={{ opacity: 1, y: -2, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.8 }}
-            transition={{ duration: 0.2 }}
-            style={{
-              position: "absolute", bottom: "calc(100% + 6px)", left: "0",
-              background: "linear-gradient(135deg, #f59e0b, #fb923c)",
-              color: "#fff", fontSize: "12px", fontWeight: 800,
-              padding: "4px 10px", borderRadius: "20px",
-              whiteSpace: "nowrap", pointerEvents: "none",
-              boxShadow: "0 4px 12px rgba(245,158,11,0.4)",
-            }}>
-            {msg}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            style={{ position: "absolute", top: "-11px", left: "2px", display: "flex", gap: "38px", pointerEvents: "none" }}>
+            <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #db2877", transform: "rotate(-12deg)" }} />
+            <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #7c3aed", transform: "rotate(12deg)" }} />
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+
+      {/* Фраза */}
+      <AnimatePresence>
+        {showPhrase && (
+          <motion.div
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: "fixed", left: "260px", top: "18px",
+              background: "linear-gradient(135deg, #1e1b4b, #2d1b4e)",
+              border: "1px solid rgba(124,58,237,0.35)",
+              color: "#e2e8f0", fontSize: "12px", fontWeight: 600,
+              padding: "6px 12px", borderRadius: "20px",
+              whiteSpace: "nowrap", pointerEvents: "none", zIndex: 9999,
+              boxShadow: "0 4px 16px rgba(124,58,237,0.25)",
+              maxWidth: "280px",
+            }}>
+            {phrase}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2877)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
+        INFERYX
+      </div>
+      <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
+    </motion.div>
   );
 }
 
