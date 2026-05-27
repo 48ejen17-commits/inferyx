@@ -31,7 +31,6 @@ export const ROLES = {
   CHATTER: "chatter",
 };
 
-// Owner намеренно убран — нельзя назначить через интерфейс
 export const ROLE_LABELS = {
   admin: "Admin",
   project_manager: "Project Manager",
@@ -39,7 +38,6 @@ export const ROLE_LABELS = {
   chatter: "Chatter",
 };
 
-// Для отображения — включает owner (только для показа, не для выбора)
 export const ROLE_LABELS_DISPLAY = {
   owner: "Owner",
   admin: "Admin",
@@ -56,38 +54,109 @@ export const ROLE_COLORS = {
   chatter: "#64748b",
 };
 
+// ── PERMISSIONS ───────────────────────────────────────────────────────────────
+export const DEFAULT_PERMISSIONS = {
+  owner: {
+    nav_dashboard: true, nav_checklist: true, nav_chat: true,
+    nav_schedule: true, nav_content: true, nav_models: true,
+    nav_team: true, nav_tasks: true, nav_analytics: true,
+    nav_settings: true, nav_admin: true, nav_team_panel: true,
+    tasks_create_any: true, tasks_assign_any: true, tasks_see_all: true,
+    models_see_all: true, content_access: true, settings_full: true,
+  },
+  admin: {
+    nav_dashboard: true, nav_checklist: true, nav_chat: true,
+    nav_schedule: true, nav_content: true, nav_models: true,
+    nav_team: true, nav_tasks: true, nav_analytics: true,
+    nav_settings: true, nav_admin: false, nav_team_panel: true,
+    tasks_create_any: true, tasks_assign_any: true, tasks_see_all: true,
+    models_see_all: true, content_access: true, settings_full: true,
+  },
+  project_manager: {
+    nav_dashboard: true, nav_checklist: true, nav_chat: true,
+    nav_schedule: true, nav_content: false, nav_models: true,
+    nav_team: true, nav_tasks: true, nav_analytics: true,
+    nav_settings: true, nav_admin: false, nav_team_panel: true,
+    tasks_create_any: true, tasks_assign_any: true, tasks_see_all: true,
+    models_see_all: true, content_access: false, settings_full: true,
+  },
+  team_lead: {
+    nav_dashboard: true, nav_checklist: true, nav_chat: true,
+    nav_schedule: true, nav_content: false, nav_models: true,
+    nav_team: true, nav_tasks: true, nav_analytics: false,
+    nav_settings: true, nav_admin: false, nav_team_panel: true,
+    tasks_create_any: false, tasks_assign_any: false, tasks_see_all: false,
+    models_see_all: false, content_access: false, settings_full: false,
+  },
+  chatter: {
+    nav_dashboard: true, nav_checklist: true, nav_chat: true,
+    nav_schedule: false, nav_content: false, nav_models: false,
+    nav_team: false, nav_tasks: true, nav_analytics: false,
+    nav_settings: true, nav_admin: false, nav_team_panel: false,
+    tasks_create_any: false, tasks_assign_any: false, tasks_see_all: false,
+    models_see_all: false, content_access: false, settings_full: false,
+  },
+};
+
+export const resolvePermissions = (role, userPerms = {}) => {
+  const base = DEFAULT_PERMISSIONS[role] || DEFAULT_PERMISSIONS.chatter;
+  return { ...base, ...userPerms };
+};
+
+export const canEditPermissions = (editorRole, targetRole) => {
+  if (editorRole === "owner") return true;
+  if (editorRole === "admin" && targetRole === "chatter") return true;
+  return false;
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState(false);
 
   useEffect(() => {
+    // Timeout — если Firebase не ответил за 10 сек показываем ошибку
+    const timeout = setTimeout(() => {
+      setLoading(false);
+      setAuthError(true);
+    }, 10000);
+
     const unsub = onAuthStateChanged(auth, async (u) => {
-      if (u) {
-        setUser(u);
-        // Find profile by uid
-        const snap = await new Promise(resolve => {
-          const unsub = onSnapshot(collection(db, "users"), snap => {
-            unsub();
-            resolve(snap);
+      clearTimeout(timeout);
+      try {
+        if (u) {
+          setUser(u);
+          const snap = await new Promise(resolve => {
+            const unsub = onSnapshot(collection(db, "users"), snap => {
+              unsub();
+              resolve(snap);
+            });
           });
-        });
-        const found = snap.docs.find(d => d.data().uid === u.uid || d.id === u.uid);
-        if (found) setProfile(found.data());
-      } else {
-        setUser(null);
-        setProfile(null);
+          const found = snap.docs.find(d => d.data().uid === u.uid || d.id === u.uid);
+          if (found) {
+            const data = found.data();
+            const perms = resolvePermissions(data.role, data.permissions || {});
+            setProfile({ ...data, _docId: found.id, _permissions: perms });
+          }
+        } else {
+          setUser(null);
+          setProfile(null);
+        }
+      } catch (e) {
+        console.error("Auth error:", e);
+        setAuthError(true);
       }
       setLoading(false);
     });
-    return () => unsub();
+    return () => { unsub(); clearTimeout(timeout); };
   }, []);
 
   const login = (email, password) => signInWithEmailAndPassword(auth, email, password);
   const logout = () => signOut(auth);
 
   return (
-    <AuthContext.Provider value={{ user, profile, login, logout, loading, db }}>
+    <AuthContext.Provider value={{ user, profile, login, logout, loading, authError, db }}>
       {children}
     </AuthContext.Provider>
   );

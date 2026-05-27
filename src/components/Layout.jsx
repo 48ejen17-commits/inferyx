@@ -24,16 +24,17 @@ export const STATUS_ICON  = { online: "🟢", away: "🌙", offline: "⚫" };
 export const STATUS_LABEL = { online: "В сети", away: "Отошёл", offline: "Не в сети" };
 
 const NAV = [
-  { to: "/", icon: LayoutDashboard, label: "Дашборд" },
-  { to: "/checklist", icon: CheckSquare, label: "Чек-лист" },
-  { to: "/chat", icon: MessageSquare, label: "Чаты" },
-  { to: "/schedule", icon: CalendarDays, label: "График" },
-  { to: "/content", icon: FileText, label: "Контент" },
-  { to: "/models", icon: UserCircle, label: "Модели" },
-  { to: "/team", icon: Users, label: "Команда" },
-  { to: "/tasks", icon: Clipboard, label: "Задачи" },
-  { to: "/analytics", icon: BarChart3, label: "Аналитика" },
-  { to: "/settings", icon: Settings, label: "Настройки" },
+  { to: "/",            icon: LayoutDashboard, label: "Дашборд",    perm: "nav_dashboard"  },
+  { to: "/checklist",   icon: CheckSquare,     label: "Чек-лист",   perm: "nav_checklist"  },
+  { to: "/chat",        icon: MessageSquare,   label: "Чаты",       perm: "nav_chat"       },
+  { to: "/schedule",    icon: CalendarDays,    label: "График",     perm: "nav_schedule"   },
+  { to: "/content",     icon: FileText,        label: "Контент",    perm: "nav_content"    },
+  { to: "/models",      icon: UserCircle,      label: "Модели",     perm: "nav_models"     },
+  { to: "/teams",       icon: Users,           label: "Команды",    perm: "nav_team"       },
+  { to: "/tasks",       icon: Clipboard,       label: "Задачи",     perm: "nav_tasks"      },
+  { to: "/analytics",   icon: BarChart3,       label: "Аналитика",  perm: "nav_analytics"  },
+  { to: "/team-panel",  icon: TrendingUp,      label: "Моя команда",perm: "nav_team_panel" },
+  { to: "/settings",    icon: Settings,        label: "Настройки",  perm: "nav_settings"   },
 ];
 
 // ── Secret Roulette ───────────────────────────────────────────────────────────
@@ -847,8 +848,11 @@ export default function Layout({ children }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", marginBottom: "24px", padding: "0 4px" }}>
           {!collapsed && (
-            <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2777)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
-              INFERYX
+            <div style={{ display: "flex", alignItems: "baseline", gap: "5px" }}>
+              <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2777)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
+                INFERYX
+              </div>
+              <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
             </div>
           )}
           <button onClick={() => setCollapsed(!collapsed)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", padding: "4px", borderRadius: "6px", display: "flex" }}>
@@ -857,7 +861,7 @@ export default function Layout({ children }) {
         </div>
 
         <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto" }}>
-          {NAV.map(({ to, icon: Icon, label }) => (
+          {NAV.filter(({ perm }) => currentProfile?._permissions?.[perm] !== false).map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               style={{ justifyContent: collapsed ? "center" : "flex-start" }}
@@ -866,8 +870,8 @@ export default function Layout({ children }) {
               {!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
-          {/* Admin only for owner */}
-          {currentProfile?.role?.toLowerCase() === "owner" && (
+          {/* Admin panel — owner и admin с разрешением */}
+          {currentProfile?._permissions?.nav_admin && (
             <NavLink to="/admin"
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               style={{ justifyContent: collapsed ? "center" : "flex-start", marginTop: "6px", borderTop: `1px solid ${t.border}`, paddingTop: "8px" }}

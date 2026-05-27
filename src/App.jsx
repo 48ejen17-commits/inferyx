@@ -19,21 +19,62 @@ import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Tasks from "./pages/Tasks";
 import Admin from "./pages/Admin";
+import Teams from "./pages/Teams";
+import TeamPanel from "./pages/TeamPanel";
 
 function ProfileWrapper() {
   const { userId } = useParams();
   return <Profile userId={userId} />;
 }
 
+function LoadingScreen({ error }) {
+  if (error) return (
+    <div style={{ position: "fixed", inset: 0, background: "#07070f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+      <div style={{ fontSize: "48px" }}>📡</div>
+      <div style={{ color: "#e2e8f0", fontSize: "18px", fontWeight: 700 }}>Проблема с подключением</div>
+      <div style={{ color: "#64748b", fontSize: "14px", textAlign: "center", maxWidth: "300px", lineHeight: "1.6" }}>
+        Не удалось подключиться к серверу.<br />Проверь интернет и попробуй снова.
+      </div>
+      <button onClick={() => window.location.reload()}
+        style={{ marginTop: "8px", padding: "12px 28px", borderRadius: "12px", background: "linear-gradient(135deg,#7c3aed,#db2877)", color: "#fff", border: "none", fontSize: "14px", fontWeight: 700, cursor: "pointer" }}>
+        🔄 Обновить страницу
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "#07070f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "20px" }}>
+      <div style={{ position: "relative" }}>
+        <svg width="60" height="60" viewBox="0 0 60 60">
+          <defs>
+            <linearGradient id="lg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#7c3aed" />
+              <stop offset="100%" stopColor="#db2877" />
+            </linearGradient>
+          </defs>
+          <polygon points="30,3 57,17 57,43 30,57 3,43 3,17" fill="url(#lg)" opacity="0.9" />
+          <text x="30" y="37" textAnchor="middle" fill="white" fontSize="20" fontWeight="900" fontFamily="Inter,sans-serif">I</text>
+        </svg>
+        <div style={{ position: "absolute", inset: -8, borderRadius: "50%", border: "2px solid transparent", borderTopColor: "#7c3aed", borderRightColor: "#db2877", animation: "spin 1s linear infinite" }} />
+      </div>
+      <div style={{ color: "#a78bfa", fontSize: "14px", fontWeight: 600, letterSpacing: "1px" }}>INFERYX</div>
+      <div style={{ color: "#334155", fontSize: "12px" }}>Подключение...</div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
 function PrivateRoute({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
+  const { user, loading, authError } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (authError) return <LoadingScreen error />;
   return user ? children : <Navigate to="/login" />;
 }
 
 function OwnerRoute({ children }) {
-  const { user, loading, profile } = useAuth();
-  if (loading) return null;
+  const { user, loading, profile, authError } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (authError) return <LoadingScreen error />;
   if (!user) return <Navigate to="/login" />;
   if (profile?.role?.toLowerCase() !== "owner") return <Navigate to="/" />;
   return children;
@@ -52,6 +93,8 @@ function AppRoutes() {
       <Route path="/content" element={<PrivateRoute><Layout><Content /></Layout></PrivateRoute>} />
       <Route path="/models" element={<PrivateRoute><Layout><Models /></Layout></PrivateRoute>} />
       <Route path="/team" element={<PrivateRoute><Layout><Team /></Layout></PrivateRoute>} />
+      <Route path="/teams" element={<PrivateRoute><Layout><Teams /></Layout></PrivateRoute>} />
+      <Route path="/team-panel" element={<PrivateRoute><Layout><TeamPanel /></Layout></PrivateRoute>} />
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />
