@@ -74,53 +74,6 @@ const buildWheel = () => {
 
 // ── CASINO SLOTS ──────────────────────────────────────────────────────────────
 const SYMBOLS = [
-  { id: "seven",   emoji: "7️⃣",  label: "SEVEN",  color: "#ef4444", weight: 2  },
-  { id: "diamond", emoji: "💎",  label: "DIAMOND", color: "#0ea5e9", weight: 4  },
-  { id: "crown",   emoji: "👑",  label: "CROWN",   color: "#f59e0b", weight: 5  },
-  { id: "star",    emoji: "⭐",  label: "STAR",    color: "#a78bfa", weight: 8  },
-  { id: "cherry",  emoji: "🍒",  label: "CHERRY",  color: "#db2877", weight: 10 },
-  { id: "lemon",   emoji: "🍋",  label: "LEMON",   color: "#84cc16", weight: 12 },
-  { id: "grape",   emoji: "🍇",  label: "GRAPE",   color: "#8b5cf6", weight: 13 },
-  { id: "melon",   emoji: "🍉",  label: "MELON",   color: "#10b981", weight: 14 },
-  { id: "bell",    emoji: "🔔",  label: "BELL",    color: "#f97316", weight: 15 },
-  { id: "skull",   emoji: "💀",  label: "SKULL",   color: "#475569", weight: 17 },
-];
-
-const PAYOUTS = {
-  seven:   { x3: 100, x2: 10 },
-  diamond: { x3: 50,  x2: 7  },
-  crown:   { x3: 30,  x2: 5  },
-  star:    { x3: 20,  x2: 4  },
-  cherry:  { x3: 15,  x2: 3  },
-  lemon:   { x3: 12,  x2: 2  },
-  grape:   { x3: 10,  x2: 0  },
-  melon:   { x3: 8,   x2: 0  },
-  bell:    { x3: 6,   x2: 0  },
-  skull:   { x3: 0,   x2: 0  },
-};
-
-// Build weighted symbol pool
-const POOL = [];
-SYMBOLS.forEach(s => { for (let i = 0; i < s.weight; i++) POOL.push(s); });
-
-const randSym = () => POOL[Math.floor(Math.random() * POOL.length)];
-
-const calcPayout = (reels, bet) => {
-  const ids = reels.map(r => r.id);
-  if (ids[0] === ids[1] && ids[1] === ids[2]) {
-    const mult = PAYOUTS[ids[0]]?.x3 || 0;
-    return { mult, type: mult > 0 ? "triple" : "lose", sym: reels[0] };
-  }
-  if (ids[0] === ids[1] || ids[1] === ids[2]) {
-    const matchId = ids[0] === ids[1] ? ids[0] : ids[1];
-    const mult = PAYOUTS[matchId]?.x2 || 0;
-    return { mult, type: mult > 0 ? "pair" : "lose", sym: SYMBOLS.find(s => s.id === matchId) };
-  }
-  return { mult: 0, type: "lose", sym: null };
-};
-
-// ── CASINO SLOTS ──────────────────────────────────────────────────────────────
-const SYMBOLS = [
   { id: "seven",   emoji: "7️⃣",  label: "7",       color: "#ef4444", weight: 2  },
   { id: "diamond", emoji: "💎",  label: "DIAMOND", color: "#0ea5e9", weight: 4  },
   { id: "crown",   emoji: "👑",  label: "CROWN",   color: "#f59e0b", weight: 5  },
