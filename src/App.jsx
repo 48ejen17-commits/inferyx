@@ -21,6 +21,7 @@ import Tasks from "./pages/Tasks";
 import Admin from "./pages/Admin";
 import Teams from "./pages/Teams";
 import TeamPanel from "./pages/TeamPanel";
+import Users from "./pages/Users";
 
 function ProfileWrapper() {
   const { userId } = useParams();
@@ -95,6 +96,7 @@ function AppRoutes() {
       <Route path="/team" element={<PrivateRoute><Layout><Team /></Layout></PrivateRoute>} />
       <Route path="/teams" element={<PrivateRoute><Layout><Teams /></Layout></PrivateRoute>} />
       <Route path="/team-panel" element={<PrivateRoute><Layout><TeamPanel /></Layout></PrivateRoute>} />
+      <Route path="/users" element={<PrivateRoute><Layout><Users /></Layout></PrivateRoute>} />
       <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Layout><Settings /></Layout></PrivateRoute>} />
       <Route path="/tasks" element={<PrivateRoute><Layout><Tasks /></Layout></PrivateRoute>} />

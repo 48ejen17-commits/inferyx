@@ -444,20 +444,33 @@ export default function Models() {
   const { theme } = useTheme();
   const t = theme;
 
-  const [models, setModels] = useState([]);
+  const [models,  setModels]  = useState([]);
   const [entries, setEntries] = useState([]);
-  const [editTarget, setEditTarget] = useState(null); // null = closed, "new" = new, model obj = edit
+  const [teams,   setTeams]   = useState([]);
+  const [editTarget,    setEditTarget]    = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const canEdit = [ROLES.OWNER, ROLES.ADMIN, ROLES.TEAM_LEAD].includes(profile?.role);
+  const isTeamLead = profile?.role === ROLES.TEAM_LEAD;
+  const isChatter  = profile?.role === ROLES.CHATTER;
 
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, "models"), snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "entries"), snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "teams"),  snap => setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
+
+  // Models visible to current user based on team membership
+  const visibleModels = (() => {
+    if (!isTeamLead && !isChatter) return models; // owner/admin/pm see all
+    // Find teams this user belongs to
+    const myTeams = teams.filter(tm => (tm.memberIds || []).includes(profile?.uid));
+    const allowedModelIds = new Set(myTeams.flatMap(tm => tm.modelIds || []));
+    return models.filter(m => allowedModelIds.has(m.id));
+  })();
 
   const saveModel = async (form) => {
     if (editTarget && editTarget !== "new") {
@@ -481,8 +494,8 @@ export default function Models() {
     setConfirmDelete(null);
   };
 
-  const active = models.filter(m => m.status !== "inactive");
-  const inactive = models.filter(m => m.status === "inactive");
+  const active   = visibleModels.filter(m => m.status !== "inactive");
+  const inactive = visibleModels.filter(m => m.status === "inactive");
 
   return (
     <div>
@@ -507,12 +520,12 @@ export default function Models() {
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-        {models.length === 0 ? (
+        {visibleModels.length === 0 ? (
           <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "60px", textAlign: "center" }}>
             <div style={{ fontSize: "40px", marginBottom: "14px" }}>👤</div>
             <p style={{ color: t.textMuted }}>Нет моделей. {canEdit ? "Создай первую!" : ""}</p>
           </div>
-        ) : models.map(model => (
+        ) : visibleModels.map(model => (
           <ModelProfileCard key={model.id} model={model} entries={entries} canEdit={canEdit}
             onEdit={m => setEditTarget(m)} onDelete={m => setConfirmDelete(m)} t={t} />
         ))}

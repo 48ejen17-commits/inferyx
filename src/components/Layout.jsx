@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth, ROLE_LABELS, ROLE_COLORS } from "../context/AuthContext";
+import { useAuth, ROLE_LABELS, ROLE_COLORS, resolvePermissions } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { collection, onSnapshot, query, where, orderBy, limit, doc, updateDoc, setDoc, getDoc } from "firebase/firestore";
 import {
@@ -592,6 +592,90 @@ function SecretSlots({ t }) {
   );
 }
 
+// ── Logo Easter Egg ───────────────────────────────────────────────────────────
+function LogoEasterEgg() {
+  const [cat, setCat] = useState(false);
+  const [meow, setMeow] = useState(false);
+  const [clicks, setClicks] = useState(0);
+
+  const handleClick = () => {
+    setCat(true);
+    setMeow(true);
+    setClicks(c => c + 1);
+
+    // Play meow sound
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const playTone = (freq, start, dur, type = "sine", vol = 0.3) => {
+        const osc = ctx.createOscillator();
+        const g   = ctx.createGain();
+        osc.connect(g); g.connect(ctx.destination);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, ctx.currentTime + start + dur * 0.3);
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.9, ctx.currentTime + start + dur);
+        g.gain.setValueAtTime(0, ctx.currentTime + start);
+        g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+        osc.start(ctx.currentTime + start);
+        osc.stop(ctx.currentTime + start + dur + 0.05);
+      };
+      playTone(600, 0,    0.12, "sine", 0.25);
+      playTone(900, 0.1,  0.18, "sine", 0.2);
+      playTone(700, 0.22, 0.25, "sine", 0.15);
+    } catch {}
+
+    setTimeout(() => { setCat(false); setMeow(false); }, 1200);
+  };
+
+  // Special messages after many clicks
+  const msgs = ["Мяу!", "Мяяяу!", "МЯУ!!", "Пурр~", "Мяу-мяу!", "Ладно, хватит 😾"];
+  const msg  = msgs[Math.min(clicks - 1, msgs.length - 1)] || "Мяу!";
+
+  return (
+    <div style={{ display: "flex", alignItems: "baseline", gap: "5px", position: "relative" }}>
+      <motion.div
+        onClick={handleClick}
+        whileTap={{ scale: 0.88 }}
+        style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px" }}>
+
+        {/* Logo text — switches to cat on click */}
+        <motion.div
+          animate={cat ? { scale: [1, 1.15, 1] } : {}}
+          transition={{ duration: 0.3 }}
+          style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: cat ? "linear-gradient(135deg, #f59e0b, #fb923c)" : "linear-gradient(135deg, #7c3aed, #db2877)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: cat ? "none" : "shimmer 4s linear infinite", transition: "background 0.2s" }}>
+          {cat ? "🐱NFERYX" : "INFERYX"}
+        </motion.div>
+
+        <span style={{ fontSize: "10px", fontWeight: 700, color: cat ? "#f59e0b" : "#475569", letterSpacing: "0.5px", transition: "color 0.2s" }}>
+          {cat ? "😸" : "v3.0"}
+        </span>
+      </motion.div>
+
+      {/* Meow popup */}
+      <AnimatePresence>
+        {meow && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.8 }}
+            animate={{ opacity: 1, y: -2, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.8 }}
+            transition={{ duration: 0.2 }}
+            style={{
+              position: "absolute", bottom: "calc(100% + 6px)", left: "0",
+              background: "linear-gradient(135deg, #f59e0b, #fb923c)",
+              color: "#fff", fontSize: "12px", fontWeight: 800,
+              padding: "4px 10px", borderRadius: "20px",
+              whiteSpace: "nowrap", pointerEvents: "none",
+              boxShadow: "0 4px 12px rgba(245,158,11,0.4)",
+            }}>
+            {msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function Layout({ children }) {
   const { profile, logout, user, db } = useAuth();
   const { mode, toggle, theme } = useTheme();
@@ -767,6 +851,7 @@ export default function Layout({ children }) {
   const handleLogout = async () => { await logout(); navigate("/login"); };
 
   const currentProfile = liveProfile || profile;
+  const currentPerms = resolvePermissions(currentProfile?.role, currentProfile?.permissions || {});
   const roleColor = ROLE_COLORS[currentProfile?.role] || "#64748b";
   const roleLabel = ROLE_LABELS[currentProfile?.role] || currentProfile?.role || "—";
   const avatarEmoji = currentProfile?.avatarEmoji;
@@ -801,12 +886,7 @@ export default function Layout({ children }) {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "space-between", marginBottom: "24px", padding: "0 4px" }}>
           {!collapsed && (
-            <div style={{ display: "flex", alignItems: "baseline", gap: "5px" }}>
-              <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2777)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
-                INFERYX
-              </div>
-              <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
-            </div>
+            <LogoEasterEgg />
           )}
           <button onClick={() => setCollapsed(!collapsed)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", padding: "4px", borderRadius: "6px", display: "flex" }}>
             {collapsed ? <ChevronRight size={18} /> : <Menu size={18} />}
@@ -814,7 +894,7 @@ export default function Layout({ children }) {
         </div>
 
         <nav style={{ flex: 1, display: "flex", flexDirection: "column", gap: "2px", overflowY: "auto" }}>
-          {NAV.filter(({ perm }) => currentProfile?._permissions?.[perm] !== false).map(({ to, icon: Icon, label }) => (
+          {NAV.filter(({ perm }) => currentPerms[perm] !== false).map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"}
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               style={{ justifyContent: collapsed ? "center" : "flex-start" }}
@@ -823,8 +903,20 @@ export default function Layout({ children }) {
               {!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
-          {/* Admin panel — owner и admin с разрешением */}
-          {currentProfile?._permissions?.nav_admin && (
+
+          {/* Пользователи — только owner/admin */}
+          {["owner","admin"].includes(currentProfile?.role) && (
+            <NavLink to="/users"
+              className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
+              style={{ justifyContent: collapsed ? "center" : "flex-start" }}
+              title={collapsed ? "Пользователи" : undefined}>
+              <Users size={18} style={{ flexShrink: 0, color: "#0ea5e9" }} />
+              {!collapsed && <span style={{ color: "#0ea5e9" }}>Пользователи</span>}
+            </NavLink>
+          )}
+
+          {/* Admin panel — только owner */}
+          {["owner"].includes(currentProfile?.role) && (
             <NavLink to="/admin"
               className={({ isActive }) => `nav-link${isActive ? " active" : ""}`}
               style={{ justifyContent: collapsed ? "center" : "flex-start", marginTop: "6px", borderTop: `1px solid ${t.border}`, paddingTop: "8px" }}
