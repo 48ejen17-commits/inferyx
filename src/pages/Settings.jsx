@@ -67,7 +67,9 @@ export default function Settings() {
     setConfirmDelete(null);
   };
 
-  const defaultPlatforms = ["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans","Snapchat"]; = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", flex: 1 };
+  const defaultPlatforms = ["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans","Snapchat"];
+
+  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", flex: 1 };
 
   return (
     <div>

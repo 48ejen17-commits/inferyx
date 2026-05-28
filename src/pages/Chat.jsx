@@ -125,10 +125,8 @@ export default function Chat() {
 
   const filteredRooms = rooms.filter(r => r.name?.toLowerCase().includes(search.toLowerCase()));
   const filteredUsers = visibleUsers.filter(u => u.uid !== user.uid &&
-    u.name?.toLowerCase().includes(memberSearch.toLowerCase()));
     (u.name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
-      u.email?.toLowerCase().includes(memberSearch.toLowerCase()))
-  );
+      u.email?.toLowerCase().includes(memberSearch.toLowerCase())));
 
   // Группируем сообщения по отправителю
   const groupedMessages = messages.reduce((groups, msg, i) => {
