@@ -8,7 +8,7 @@ import {
   Clock, Filter, ChevronDown, AlertTriangle, CheckCircle,
   MessageSquare, Star, DollarSign, Percent, Target, Zap,
   Download, RefreshCw, Search, Eye, BarChart2, Award,
-  Edit3, Trash2, Plus, X, Minus
+  Edit3, Trash2, Plus, X, Minus, Globe
 } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -56,6 +56,7 @@ const TABS = [
   { key: "logs",         label: "Логи",            icon: Activity },
   { key: "reddit",       label: "Reddit Stats",    icon: TrendingUp },
   { key: "finance",      label: "Финансы",         icon: DollarSign },
+  { key: "platforms",    label: "Платформы",       icon: Globe },
   { key: "calculator",   label: "Калькуляторы",    icon: Calculator },
   { key: "kpi",          label: "KPI команды",     icon: Target },
 ];
@@ -247,6 +248,10 @@ export default function Admin() {
       {/* ── CALCULATOR ───────────────────────────────────────────────────────── */}
       {tab === "finance" && (
         <FinanceTab db={db} t={t} />
+      )}
+
+      {tab === "platforms" && (
+        <PlatformsTab db={db} t={t} />
       )}
 
       {tab === "reddit" && (
@@ -1053,6 +1058,109 @@ function KpiTab({ users, entries, tasks, grid, t }) {
       <div style={{ marginTop: "14px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "12px", padding: "12px 16px" }}>
         <span style={{ color: "#a78bfa", fontSize: "12px" }}>📊 Скор = (записи × 3) + (посты Reddit × 2) + (задачи выполнены × 5) − (проблемы × 2)</span>
       </div>
+    </motion.div>
+  );
+}
+
+// ── PLATFORMS TAB ─────────────────────────────────────────────────────────────
+function PlatformsTab({ db, t }) {
+  const [platforms, setPlatforms] = useState([]);
+  const [newName,   setNewName]   = useState("");
+  const [adding,    setAdding]    = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const DEFAULT_PLATFORMS = ["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans","Snapchat"];
+
+  useEffect(() => {
+    return onSnapshot(collection(db, "platforms"), snap =>
+      setPlatforms(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+  }, [db]);
+
+  const add = async () => {
+    if (!newName.trim()) return;
+    setAdding(true);
+    await addDoc(collection(db, "platforms"), { name: newName.trim(), createdAt: new Date().toISOString() });
+    setNewName("");
+    setAdding(false);
+  };
+
+  const del = async (id) => {
+    await import("firebase/firestore").then(m => m.deleteDoc(m.doc(db, "platforms", id)));
+    setConfirmDel(null);
+  };
+
+  const allPlatforms = [
+    ...DEFAULT_PLATFORMS.map(name => ({ id: null, name, isDefault: true })),
+    ...platforms.filter(p => !DEFAULT_PLATFORMS.includes(p.name)).map(p => ({ ...p, isDefault: false })),
+  ];
+
+  const inputS = { background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "13px", outline: "none", fontFamily: "inherit", flex: 1 };
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+      <div style={{ marginBottom: "20px" }}>
+        <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "6px" }}>Платформы для трафика</h3>
+        <p style={{ color: t.textMuted, fontSize: "13px" }}>Эти платформы отображаются в чек-листе публикаций и отчётах.</p>
+      </div>
+
+      {/* Add new */}
+      <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
+        <input value={newName} onChange={e => setNewName(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && add()}
+          placeholder="Название новой платформы..."
+          style={inputS} />
+        <button onClick={add} disabled={adding || !newName.trim()}
+          style={{ display: "flex", alignItems: "center", gap: "6px", background: newName.trim() ? "linear-gradient(135deg,#7c3aed,#db2877)" : "rgba(124,58,237,0.2)", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 18px", fontSize: "13px", fontWeight: 700, cursor: newName.trim() ? "pointer" : "not-allowed", flexShrink: 0 }}>
+          <Plus size={14} />{adding ? "..." : "Добавить"}
+        </button>
+      </div>
+
+      {/* Platforms grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "10px" }}>
+        {allPlatforms.map((p, i) => (
+          <div key={p.id || p.name} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "12px 14px", background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "12px" }}>
+            <Globe size={16} style={{ color: p.isDefault ? "#7c3aed" : "#10b981", flexShrink: 0 }} />
+            <span style={{ color: t.text, fontSize: "13px", fontWeight: 600, flex: 1 }}>{p.name}</span>
+            {p.isDefault ? (
+              <span style={{ color: t.textFaint, fontSize: "10px" }}>по умолч.</span>
+            ) : (
+              <button onClick={() => setConfirmDel(p)}
+                style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "2px" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                onMouseLeave={e => e.currentTarget.style.color = t.textFaint}>
+                <Trash2 size={13} />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: "16px", padding: "12px 16px", background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "10px" }}>
+        <span style={{ color: "#a78bfa", fontSize: "12px" }}>
+          💡 Платформы по умолчанию нельзя удалить. Добавленные тобой — можно.
+        </span>
+      </div>
+
+      <AnimatePresence>
+        {confirmDel && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            onClick={() => setConfirmDel(null)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:400, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
+            <motion.div initial={{ scale:0.92 }} animate={{ scale:1 }} exit={{ scale:0.92 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary||t.bgCard, border:"1px solid rgba(239,68,68,0.3)", borderRadius:"18px", padding:"24px", maxWidth:"360px", width:"100%", textAlign:"center" }}>
+              <div style={{ fontSize:"28px", marginBottom:"10px" }}>🗑️</div>
+              <h3 style={{ color:t.text, marginBottom:"8px" }}>Удалить платформу?</h3>
+              <p style={{ color:t.textMuted, fontSize:"13px", marginBottom:"20px" }}>«{confirmDel.name}» будет удалена из чек-листа</p>
+              <div style={{ display:"flex", gap:"10px" }}>
+                <button onClick={() => del(confirmDel.id)} style={{ flex:1, background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", color:"#ef4444", borderRadius:"10px", padding:"11px", fontWeight:600, cursor:"pointer" }}>Удалить</button>
+                <button onClick={() => setConfirmDel(null)} style={{ flex:1, background:t.bgCardHover, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"10px", padding:"11px", cursor:"pointer" }}>Отмена</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

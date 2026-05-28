@@ -34,7 +34,6 @@ const NAV = [
   { to: "/tasks",       icon: Clipboard,       label: "Задачи",     perm: "nav_tasks"      },
   { to: "/analytics",   icon: BarChart3,       label: "Аналитика",  perm: "nav_analytics"  },
   { to: "/team-panel",  icon: TrendingUp,      label: "Моя команда",perm: "nav_team_panel" },
-  { to: "/settings",    icon: Settings,        label: "Настройки",  perm: "nav_settings"   },
 ];
 
 // ── Secret Roulette ───────────────────────────────────────────────────────────
@@ -1004,6 +1003,28 @@ export default function Layout({ children }) {
               </div>
             )}
           </div>
+          {/* Theme toggle + support */}
+          {!collapsed && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", marginBottom: "4px" }}>
+              <button onClick={toggle}
+                style={{ display: "flex", alignItems: "center", gap: "6px", background: t.bgCardHover, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "6px 10px", cursor: "pointer", fontSize: "12px", color: t.textMuted, flex: 1 }}>
+                {isDark ? <Moon size={13}/> : <Sun size={13}/>}
+                <span>{isDark ? "Тёмная" : "Светлая"}</span>
+              </button>
+              <a href="https://t.me/mars_cd" target="_blank" rel="noopener noreferrer"
+                title="Нашли проблему? Пишите @mars_cd в Telegram"
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "30px", height: "30px", borderRadius: "8px", background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textFaint, textDecoration: "none", flexShrink: 0, fontSize: "14px" }}>
+                ?
+              </a>
+            </div>
+          )}
+          {collapsed && (
+            <a href="https://t.me/mars_cd" target="_blank" rel="noopener noreferrer"
+              title="Нашли проблему? Пишите @mars_cd в Telegram"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "36px", height: "36px", borderRadius: "8px", background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textFaint, textDecoration: "none", margin: "4px auto", fontSize: "14px" }}>
+              ?
+            </a>
+          )}
           <button onClick={handleLogout} className="nav-link" style={{ width: "100%", background: "none", border: "none", cursor: "pointer", justifyContent: collapsed ? "center" : "flex-start" }}>
             <LogOut size={18} style={{ flexShrink: 0 }} />
             {!collapsed && <span>Выйти</span>}
