@@ -968,6 +968,7 @@ export default function Dashboard() {
   const [tasks,     setTasks]     = useState([]);
   const [grid,      setGrid]      = useState([]);
   const [users,     setUsers]     = useState([]);
+  const [teams,     setTeams]     = useState([]);
   const [loading,   setLoading]   = useState(true);
 
   const isAdmin = [ROLES.OWNER, ROLES.ADMIN].includes(profile?.role);
