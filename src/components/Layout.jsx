@@ -601,46 +601,76 @@ function LogoEasterEgg() {
   const phraseTimerRef = useRef(null);
 
   const PHRASES = [
+    // Хватит, работай
+    "Хватит кликать, пора работать 😤",
+    "Стоп. Открой задачи 📋",
+    "Это не кнопка прокрастинации 🙅",
+    "Ты точно уже поработал сегодня?",
+    "Дедлайн сам себя не сдвинет 💀",
+    "Закрой YouTube и работай 😂",
+    "Серьёзно? Снова сюда жмёшь?",
+    "ОК ОК всё хватит 😾",
+    "Иди. Работать. Сейчас 🫵",
+    "Вот это уже перебор кликов",
     // Мотивашки
     "Ты сильнее чем думаешь 💪",
     "Сегодня твой день 🔥",
-    "Ещё один пост — ещё один шаг 🚀",
+    "Каждый пост — шаг к цели 📈",
     "Работай пока они спят 🌙",
     "Успех любит настойчивых ⚡",
-    "Каждый пост считается 📈",
-    "Ты на правильном пути ✅",
     "Не останавливайся сейчас 🏆",
-    "Маленькие шаги — большие результаты 🎯",
+    "Маленькие шаги — большой результат",
     "Верь в процесс 🧠",
+    "Сделай сейчас — отдохни потом",
+    "Ещё один пост и ты красавчик 😎",
+    "Команда смотрит на тебя 👀",
+    "Лучшее время начать — сейчас",
+    "Будущий ты скажет спасибо",
+    "Усердие бьёт талант каждый раз",
     // Юмор
     "Кофе сам себя не нальёт ☕",
     "Это не баг, это фича 🐛",
-    "Ещё пять минут... уже три часа 😅",
-    "Ctrl+Z к сожалению не работает в жизни",
     "404: мотивация не найдена 🔍",
-    "Работаем или делаем вид? 👀",
-    "Дедлайн — лучшая мотивация 💀",
+    "Ctrl+Z в жизни не работает увы",
+    "Ещё 5 минут... уже 3 часа 😅",
     "Главное — не заснуть на смене 😴",
-    "Ты это можешь. Наверное. 🤷",
-    "Почему всё работает? Не трогай 🙏",
+    "Я не прокрастинирую — я думаю 🤔",
+    "Баг или фича — философский вопрос",
+    "Продуктивность: 10% работа 90% вкладки",
+    "Перезагрузи себя как компьютер 🔄",
+    "Система в норме. Оператор — нет 😂",
+    "Ошибка 418: я чайник 🫖",
+    "Всё под контролем... наверное",
+    "Это рабочее время? Похоже да",
     "Сначала кофе, потом вопросы ☕",
-    "Я не прокрастинирую, я думаю 🤔",
-    "Баг или особенность — вопрос философский",
-    "Осталось только нажать кнопку... 🔴",
-    "Продуктивность: 10% работа, 90% вкладки 😂",
+    "Ты это можешь. Наверное 🤷",
+    "Почему работает — не трогай 🙏",
+    "Stack overflow в голове? Ясно",
+    "Удали кеш — авось поможет",
+    "Инфа 100% — иди работать",
     // Рабочие
     "Проверь план на сегодня 📋",
-    "Как дела у команды? 👥",
+    "Как там команда? Не потерялись?",
     "Не забудь отметить посты ✅",
     "Синхронизируйся с тим-лидом 🔄",
     "Время = деньги. Вперёд! 💰",
     "Отдохнул? Теперь работай 😈",
     "Командный дух решает всё 🤝",
-    // Философия
-    "Всё будет хорошо. Или нет. Но скорее да 🌈",
-    "Жизнь слишком коротка для скучной работы ✨",
-    "Делай что любишь или люби что делаешь",
-    "Инфертикс — не просто платформа, это стиль 😎",
+    "Проверь уведомления 🔔",
+    "Новых DM не было? Плохо 📩",
+    "Модели сами себя не ведут",
+    "График на неделю уже готов?",
+    // Философия и прочее
+    "Всё будет хорошо. Скорее всего 🌈",
+    "Делай что любишь или полюби что делаешь",
+    "Жизнь слишком коротка для скуки ✨",
+    "INFERYX — не просто платформа 😎",
+    "Деньги не спят. И ты не спи 💸",
+    "Каждый великий начинал с нуля",
+    "Удача = подготовка + момент",
+    "Думай как овнер. Работай как чаттер",
+    "Рим не за день построили. Но начали",
+    "В команде сила. Вперёд! 🚀",
   ];
 
   const handleClick = () => {
@@ -648,12 +678,10 @@ function LogoEasterEgg() {
     setPhrase(random);
     setHorns(true);
     setShowPhrase(true);
-
     clearTimeout(timerRef.current);
     clearTimeout(phraseTimerRef.current);
-
     timerRef.current = setTimeout(() => setHorns(false), 2000);
-    phraseTimerRef.current = setTimeout(() => setShowPhrase(false), 2500);
+    phraseTimerRef.current = setTimeout(() => setShowPhrase(false), 2800);
   };
 
   useEffect(() => () => {
@@ -662,54 +690,49 @@ function LogoEasterEgg() {
   }, []);
 
   return (
-    <motion.div
-      onClick={handleClick}
-      whileTap={{ scale: 0.92 }}
-      style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px", position: "relative" }}>
+    <div style={{ position: "relative" }}>
+      <motion.div
+        onClick={handleClick}
+        whileTap={{ scale: 0.92 }}
+        style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px" }}>
 
-      {/* Рожки */}
-      <AnimatePresence>
-        {horns && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.15 }}
-            style={{ position: "absolute", top: "-11px", left: "2px", display: "flex", gap: "38px", pointerEvents: "none" }}>
-            <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #db2877", transform: "rotate(-12deg)" }} />
-            <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #7c3aed", transform: "rotate(12deg)" }} />
-          </motion.div>
-        )}
-      </AnimatePresence>
+        {/* Рожки */}
+        <AnimatePresence>
+          {horns && (
+            <motion.div
+              initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.12 }}
+              style={{ position: "absolute", top: "-11px", left: "2px", display: "flex", gap: "38px", pointerEvents: "none" }}>
+              <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #db2877", transform: "rotate(-12deg)" }} />
+              <div style={{ width: 0, height: 0, borderLeft: "4px solid transparent", borderRight: "4px solid transparent", borderBottom: "10px solid #7c3aed", transform: "rotate(12deg)" }} />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Фраза */}
+        <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2877)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
+          INFERYX
+        </div>
+        <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
+      </motion.div>
+
+      {/* Фраза — вписана под лого, не выходит за экран */}
       <AnimatePresence>
         {showPhrase && (
           <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18 }}
             style={{
-              position: "fixed", left: "260px", top: "18px",
-              background: "linear-gradient(135deg, #1e1b4b, #2d1b4e)",
-              border: "1px solid rgba(124,58,237,0.35)",
-              color: "#e2e8f0", fontSize: "12px", fontWeight: 600,
-              padding: "6px 12px", borderRadius: "20px",
-              whiteSpace: "nowrap", pointerEvents: "none", zIndex: 9999,
-              boxShadow: "0 4px 16px rgba(124,58,237,0.25)",
-              maxWidth: "280px",
+              position: "absolute", top: "28px", left: 0,
+              color: "#6366f1", fontSize: "11px", fontWeight: 600,
+              whiteSpace: "nowrap", pointerEvents: "none",
+              maxWidth: "210px", overflow: "hidden",
+              textOverflow: "ellipsis", lineHeight: 1.3,
             }}>
             {phrase}
           </motion.div>
         )}
       </AnimatePresence>
-
-      <div style={{ fontSize: "20px", fontWeight: 800, letterSpacing: "-0.5px", background: "linear-gradient(135deg, #7c3aed, #db2877)", backgroundSize: "200% auto", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", animation: "shimmer 4s linear infinite" }}>
-        INFERYX
-      </div>
-      <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
-    </motion.div>
+    </div>
   );
 }
 

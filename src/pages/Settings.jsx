@@ -16,13 +16,34 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState("platforms");
   const [confirmDelete, setConfirmDelete] = useState(null); // { type, id, name }
 
-  const isOwner = profile?.role === ROLES.OWNER;
-  const isAdmin = profile?.role === ROLES.ADMIN || isOwner;
+  const isOwner   = profile?.role === ROLES.OWNER;
+  const isAdmin   = profile?.role === ROLES.ADMIN || isOwner;
+  const isChatter = profile?.role === ROLES.CHATTER;
+  const isTeamLead = profile?.role === ROLES.TEAM_LEAD;
+
+  const allTabs = [
+    { id: "platforms",  label: "Платформы",    icon: Globe,        restricted: true  },
+    { id: "models",     label: "Модели",        icon: User,         restricted: true  },
+    { id: "appearance", label: "Внешний вид",   icon: mode === "dark" ? Moon : Sun, restricted: false },
+    { id: "account",    label: "Аккаунт",       icon: SettingsIcon, restricted: false },
+  ];
+
+  // Chatter and team_lead only see appearance + account
+  const tabs = (isChatter || isTeamLead)
+    ? allTabs.filter(tb => !tb.restricted)
+    : allTabs;
+
+  // Set default tab based on role
+  useEffect(() => {
+    if ((isChatter || isTeamLead) && (activeTab === "platforms" || activeTab === "models")) {
+      setActiveTab("appearance");
+    }
+  }, [profile?.role]);
 
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, "platforms"), snap => setPlatforms(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(collection(db, "models"), snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "models"),    snap => setModels(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
@@ -42,20 +63,11 @@ export default function Settings() {
   const confirmAndDelete = async () => {
     if (!confirmDelete) return;
     if (confirmDelete.type === "platform") await deleteDoc(doc(db, "platforms", confirmDelete.id));
-    if (confirmDelete.type === "model") await deleteDoc(doc(db, "models", confirmDelete.id));
+    if (confirmDelete.type === "model")    await deleteDoc(doc(db, "models",    confirmDelete.id));
     setConfirmDelete(null);
   };
 
-  const defaultPlatforms = ["Reddit", "Twitter/X", "TikTok", "Instagram", "Telegram", "Discord", "Facebook", "YouTube", "OnlyFans", "Snapchat"];
-
-  const tabs = [
-    { id: "platforms", label: "Платформы", icon: Globe },
-    { id: "models", label: "Модели", icon: User },
-    { id: "appearance", label: "Внешний вид", icon: mode === "dark" ? Moon : Sun },
-    { id: "account", label: "Аккаунт", icon: SettingsIcon },
-  ];
-
-  const inputStyle = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", flex: 1 };
+  const defaultPlatforms = ["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans","Snapchat"]; = { background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit", flex: 1 };
 
   return (
     <div>

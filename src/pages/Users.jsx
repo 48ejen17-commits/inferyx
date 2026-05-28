@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
-import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { useAuth, ROLES, ROLE_LABELS, ROLE_LABELS_DISPLAY, ROLE_COLORS, DEFAULT_PERMISSIONS, resolvePermissions, canEditPermissions } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { Plus, X, Edit3, Trash2, Shield, Check, AlertTriangle, Search, ChevronDown, ChevronUp } from "lucide-react";
@@ -212,14 +213,27 @@ function NewUserModal({ db, t, onClose }) {
     setSaving(true);
     setError("");
     try {
-      const secondAuth = getAuth();
-      const cred = await createUserWithEmailAndPassword(secondAuth, form.email.trim(), form.password);
+      // Создаём вторичный экземпляр Firebase чтобы не залогиниться под новым пользователем
+      const secondaryApp = initializeApp(
+        getApps()[0].options,
+        "secondary-" + Date.now()
+      );
+      const secondaryAuth = getAuth(secondaryApp);
+      const cred = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        form.email.trim(),
+        form.password
+      );
+      // Сразу выходим из вторичной сессии
+      await signOut(secondaryAuth);
+
+      // Сохраняем в Firestore
       await addDoc(collection(db, "users"), {
-        uid:      cred.user.uid,
-        name:     form.name.trim(),
-        email:    form.email.trim(),
-        role:     form.role,
-        telegram: form.telegram.trim(),
+        uid:       cred.user.uid,
+        name:      form.name.trim(),
+        email:     form.email.trim(),
+        role:      form.role,
+        telegram:  form.telegram.trim(),
         permissions: {},
         createdAt: new Date().toISOString(),
       });

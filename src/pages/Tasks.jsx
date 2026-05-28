@@ -38,26 +38,46 @@ export default function Tasks() {
     assigneeId: "", assigneeName: "", dueDate: "", column: "todo", tags: ""
   });
 
-  const canManage = [ROLES.OWNER, ROLES.ADMIN].includes(profile?.role);
+  const isChatter  = profile?.role === ROLES.CHATTER;
+  const isTeamLead = profile?.role === ROLES.TEAM_LEAD;
+  const canManage  = [ROLES.OWNER, ROLES.ADMIN].includes(profile?.role);
+
+  // Teams for scoping
+  const [teams, setTeams] = useState([]);
 
   useEffect(() => {
     const unsubs = [
       onSnapshot(collection(db, "tasks"), snap => setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "users"), snap => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "teams"), snap => setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
 
+  // My team member IDs (for chatter/team_lead)
+  const myTeamMemberIds = (isChatter || isTeamLead)
+    ? new Set(teams.filter(tm => (tm.memberIds || []).includes(profile?.uid)).flatMap(tm => tm.memberIds || []))
+    : null;
+
+  // Users chatter can assign tasks to (only themselves)
+  const assignableUsers = isChatter
+    ? users.filter(u => u.uid === profile?.uid || u.id === profile?.uid)
+    : isTeamLead
+    ? users.filter(u => myTeamMemberIds?.has(u.uid || u.id))
+    : users;
+
   const addTask = async () => {
     if (!form.title.trim()) return;
-    const assignee = users.find(u => u.id === form.assigneeId);
+    // Chatter can only assign to themselves
+    const assigneeId = isChatter ? (profile?.uid || "") : form.assigneeId;
+    const assignee   = users.find(u => u.id === assigneeId || u.uid === assigneeId);
     await addDoc(collection(db, "tasks"), {
       title: form.title.trim(),
       description: form.description.trim(),
       priority: form.priority,
-      assigneeId: form.assigneeId,
-      assigneeName: assignee?.name || "—",
-      assigneeRole: assignee?.role || "",
+      assigneeId,
+      assigneeName: isChatter ? profile?.name : (assignee?.name || "—"),
+      assigneeRole: isChatter ? profile?.role : (assignee?.role || ""),
       dueDate: form.dueDate,
       column: form.column,
       tags: form.tags.split(",").map(t => t.trim()).filter(Boolean),
@@ -93,10 +113,23 @@ export default function Tasks() {
   const isOverdue = (dueDate) => dueDate && new Date(dueDate) < new Date() && new Date(dueDate).toDateString() !== new Date().toDateString();
   const isDueToday = (dueDate) => dueDate && new Date(dueDate).toDateString() === new Date().toDateString();
 
-  const filteredTasks = tasks.filter(task =>
-    (filterAssignee === "all" || task.assigneeId === filterAssignee) &&
-    (filterPriority === "all" || task.priority === filterPriority)
-  );
+  const filteredTasks = tasks
+    .filter(task => {
+      // Chatter: only tasks assigned to them or created by them
+      if (isChatter) {
+        const myUid = profile?.uid;
+        return task.assigneeId === myUid || task.createdBy === myUid;
+      }
+      // TeamLead: only tasks within their team
+      if (isTeamLead && myTeamMemberIds) {
+        return myTeamMemberIds.has(task.assigneeId) || myTeamMemberIds.has(task.createdBy);
+      }
+      return true;
+    })
+    .filter(task =>
+      (filterAssignee === "all" || task.assigneeId === filterAssignee) &&
+      (filterPriority === "all" || task.priority === filterPriority)
+    );
 
   const getColumnTasks = (colId) => filteredTasks.filter(t => t.column === colId);
 
@@ -121,7 +154,7 @@ export default function Tasks() {
           <select value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)}
             style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none" }}>
             <option value="all">Все исполнители</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            {assignableUsers.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}</option>)}
           </select>
           <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)}
             style={{ background: t.bgCard, color: t.text, border: `1px solid ${t.border}`, borderRadius: "8px", padding: "8px 12px", fontSize: "13px", outline: "none" }}>
@@ -330,7 +363,7 @@ export default function Tasks() {
                       }}
                       style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "8px", padding: "6px 10px", fontSize: "13px", outline: "none", width: "100%" }}>
                       <option value="">Не назначен</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      {assignableUsers.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}</option>)}
                     </select>
                   ) : (
                     <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{selectedTask.assigneeName || "Не назначен"}</div>
@@ -418,7 +451,7 @@ export default function Tasks() {
                     <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "6px" }}>Исполнитель</label>
                     <select value={form.assigneeId} onChange={e => setForm({ ...form, assigneeId: e.target.value })} style={{ ...inputStyle }}>
                       <option value="">Не назначен</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      {assignableUsers.map(u => <option key={u.id} value={u.uid || u.id}>{u.name}</option>)}
                     </select>
                   </div>
                   <div>

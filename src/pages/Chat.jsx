@@ -17,6 +17,7 @@ export default function Chat() {
   const t = theme;
   const [rooms, setRooms] = useState([]);
   const [users, setUsers] = useState([]);
+  const [teams, setTeams] = useState([]);
   const [messages, setMessages] = useState([]);
   const [activeRoom, setActiveRoom] = useState(null);
   const [text, setText] = useState("");
@@ -28,6 +29,20 @@ export default function Chat() {
   const messagesEndRef = useRef(null);
 
   const activeRoomRef = useRef(null);
+
+  const isChatter  = profile?.role === "chatter";
+  const isTeamLead = profile?.role === "team_lead";
+  const isRestricted = isChatter || isTeamLead;
+
+  // My team member IDs
+  const myTeamMemberIds = isRestricted
+    ? new Set(teams.filter(tm => (tm.memberIds || []).includes(profile?.uid)).flatMap(tm => tm.memberIds || []))
+    : null;
+
+  // Users visible to current user
+  const visibleUsers = myTeamMemberIds
+    ? users.filter(u => myTeamMemberIds.has(u.uid || u.id))
+    : users;
 
   useEffect(() => {
     const unsubs = [
@@ -59,6 +74,7 @@ export default function Chat() {
         }
       }),
       onSnapshot(collection(db, "users"), snap => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "teams"), snap => setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
@@ -108,7 +124,8 @@ export default function Chat() {
   );
 
   const filteredRooms = rooms.filter(r => r.name?.toLowerCase().includes(search.toLowerCase()));
-  const filteredUsers = users.filter(u => u.uid !== user.uid &&
+  const filteredUsers = visibleUsers.filter(u => u.uid !== user.uid &&
+    u.name?.toLowerCase().includes(memberSearch.toLowerCase()));
     (u.name?.toLowerCase().includes(memberSearch.toLowerCase()) ||
       u.email?.toLowerCase().includes(memberSearch.toLowerCase()))
   );
@@ -185,10 +202,10 @@ export default function Chat() {
 
         <div style={{ padding: "12px", borderTop: `1px solid ${t.border}` }}>
           <div style={{ color: t.textFaint, fontSize: "11px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "8px" }}>
-            Команда ({users.length})
+            Команда ({visibleUsers.length})
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {users.slice(0, 5).map(u => (
+            {visibleUsers.slice(0, 5).map(u => (
               <div key={u.id}
                 onClick={() => navigate(`/profile/${u.uid || u.id}`)}
                 style={{ display: "flex", alignItems: "center", gap: "8px", padding: "5px 6px", borderRadius: "8px", cursor: "pointer", transition: "background 0.15s" }}

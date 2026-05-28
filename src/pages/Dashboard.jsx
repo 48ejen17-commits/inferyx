@@ -980,30 +980,62 @@ export default function Dashboard() {
       onSnapshot(collection(db, "tasks"),        snap => setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "content_grid"), snap => setGrid(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, "users"),        snap => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "teams"),        snap => setTeams(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
     ];
     return () => unsubs.forEach(u => u());
   }, [db]);
 
+  // ── Scope data by team for chatter/team_lead ──────────────────────────────
+  const isChatter  = profile?.role === "chatter";
+  const isTeamLead = profile?.role === "team_lead";
+  const isRestricted = isChatter || isTeamLead;
+
+  const myTeamModelIds = isRestricted
+    ? new Set(teams.filter(tm => (tm.memberIds || []).includes(profile?.uid)).flatMap(tm => tm.modelIds || []))
+    : null;
+
+  const myTeamMemberIds = isRestricted
+    ? new Set(teams.filter(tm => (tm.memberIds || []).includes(profile?.uid)).flatMap(tm => tm.memberIds || []))
+    : null;
+
+  // Filtered entries — chatter sees only own, team_lead sees team
+  const scopedEntries = isChatter
+    ? entries.filter(e => e.userId === profile?.uid)
+    : isTeamLead && myTeamMemberIds
+    ? entries.filter(e => myTeamMemberIds.has(e.userId))
+    : entries;
+
+  // Filtered models
+  const scopedModels = isRestricted && myTeamModelIds
+    ? models.filter(m => myTeamModelIds.has(m.id))
+    : models;
+
   // ── Derived stats ────────────────────────────────────────────────────────
   const todayStr     = new Date().toLocaleDateString("ru-RU");
   const ystrdayStr   = new Date(Date.now() - 86400000).toLocaleDateString("ru-RU");
-  const todayEntries = entries.filter(e => e.date === todayStr);
+  const todayEntries = scopedEntries.filter(e => e.date === todayStr);
   const todayCount   = todayEntries.length;
-  const ystrdayCount = entries.filter(e => e.date === ystrdayStr).length;
+  const ystrdayCount = scopedEntries.filter(e => e.date === ystrdayStr).length;
   const diff         = todayCount - ystrdayCount;
   const diffPct      = ystrdayCount > 0 ? Math.round((diff / ystrdayCount) * 100) : 0;
 
-  const activeModels   = models.filter(m => m.status !== "inactive");
-  const inactiveModels = models.filter(m => m.status === "inactive");
+  const activeModels   = scopedModels.filter(m => m.status !== "inactive");
+  const inactiveModels = scopedModels.filter(m => m.status === "inactive");
 
-  const todayPosted   = grid.filter(g => g.date === todayStr     && g.status === "posted").length;
-  const todayProblems = grid.filter(g => g.date === todayStr     && g.status === "problem").length;
+  const todayPosted   = grid.filter(g => g.date === todayStr && g.status === "posted" && (!myTeamModelIds || myTeamModelIds.has(g.modelId))).length;
+  const todayProblems = grid.filter(g => g.date === todayStr && g.status === "problem" && (!myTeamModelIds || myTeamModelIds.has(g.modelId))).length;
   const weekDates     = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(); d.setDate(d.getDate() - i); return d.toLocaleDateString("ru-RU");
   });
-  const weekPosted    = grid.filter(g => weekDates.includes(g.date) && g.status === "posted").length;
+  const weekPosted = grid.filter(g => weekDates.includes(g.date) && g.status === "posted" && (!myTeamModelIds || myTeamModelIds.has(g.modelId))).length;
 
-  const openTasks   = tasks.filter(tk => tk.column !== "done");
+  // Tasks scoped
+  const openTasks   = tasks.filter(tk => {
+    if (tk.column === "done") return false;
+    if (isChatter) return tk.assigneeId === profile?.uid || tk.createdBy === profile?.uid;
+    if (isTeamLead && myTeamMemberIds) return myTeamMemberIds.has(tk.assigneeId) || myTeamMemberIds.has(tk.createdBy);
+    return true;
+  });
   const urgentTasks = openTasks.filter(tk => tk.priority === "urgent");
 
   const stats = [
