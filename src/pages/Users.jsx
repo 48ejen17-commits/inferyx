@@ -135,7 +135,9 @@ function UserRow({ u, editorRole, canDelete, db, t, onDelete }) {
         {/* Info */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "2px" }}>{u.name || "—"}</div>
-          <div style={{ color: t.textMuted, fontSize: "12px" }}>{u.email || u.telegram || "—"}</div>
+          <div style={{ color: t.textMuted, fontSize: "12px" }}>
+            {editorRole === "owner" ? (u.email || u.telegram || "—") : (u.telegram || u.role || "—")}
+          </div>
         </div>
 
         {/* Role */}

@@ -1,167 +1,217 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { collection, onSnapshot, addDoc, updateDoc, doc, query, where } from "firebase/firestore";
-import { useAuth } from "../context/AuthContext";
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, where, getDocs } from "firebase/firestore";
+import { useAuth, ROLES } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { CheckSquare, Square, Plus, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { CheckSquare, Square, ChevronLeft, ChevronRight, Calendar, BarChart2 } from "lucide-react";
 
-const DAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+const DAYS_SHORT = ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"];
 
 export default function Checklist() {
   const { db, user, profile } = useAuth();
-  const { theme } = useTheme();
-  const t = theme;
-  const [models, setModels] = useState([]);
-  const [platforms, setPlatforms] = useState([]);
-  const [checks, setChecks] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showAddModel, setShowAddModel] = useState(false);
-  const [newModelName, setNewModelName] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { theme: t } = useTheme();
 
+  const [models,    setModels]    = useState([]);
+  const [platforms, setPlatforms] = useState([]);
+  const [checks,    setChecks]    = useState([]);
+  const [teams,     setTeams]     = useState([]);
+  const [viewMode,  setViewMode]  = useState("day"); // "day" | "week"
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [loading,   setLoading]   = useState(true);
+
+  const isChatter  = profile?.role === ROLES.CHATTER;
+  const isTeamLead = profile?.role === ROLES.TEAM_LEAD;
+  const canEdit    = !isChatter;
+
+  // Week dates
+  const getWeekDates = () => {
+    const today = new Date();
+    const day = today.getDay();
+    const mon = new Date(today);
+    mon.setDate(today.getDate() - (day === 0 ? 6 : day - 1) + weekOffset * 7);
+    return Array.from({ length: 7 }, (_, i) => { const d = new Date(mon); d.setDate(mon.getDate() + i); return d; });
+  };
+  const weekDates = getWeekDates();
   const dateKey = selectedDate.toLocaleDateString("ru-RU");
 
   useEffect(() => {
     const unsubs = [
-      onSnapshot(collection(db, "models"), snap => { setModels(snap.docs.map(d => ({ id: d.id, ...d.data() }))); setLoading(false); }),
-      onSnapshot(collection(db, "platforms"), snap => setPlatforms(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(query(collection(db, "checklist"), where("date", "==", dateKey)), snap => setChecks(snap.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, "models"),    s => { setModels(s.docs.map(d=>({id:d.id,...d.data()}))); setLoading(false); }),
+      onSnapshot(collection(db, "platforms"), s => setPlatforms(s.docs.map(d=>({id:d.id,...d.data()})))),
+      onSnapshot(collection(db, "teams"),     s => setTeams(s.docs.map(d=>({id:d.id,...d.data()})))),
     ];
-    return () => unsubs.forEach(u => u());
-  }, [db, dateKey]);
+    return () => unsubs.forEach(u=>u());
+  }, [db]);
 
-  const allPlatforms = ["Reddit", "Twitter/X", "TikTok", "Instagram", "Telegram", "Discord", "Facebook", "YouTube", "OnlyFans",
-    ...platforms.map(p => p.name).filter(p => !["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans"].includes(p))
+  // Load checks for current view
+  useEffect(() => {
+    if (viewMode === "day") {
+      const unsub = onSnapshot(query(collection(db,"checklist"), where("date","==",dateKey)),
+        s => setChecks(s.docs.map(d=>({id:d.id,...d.data()}))));
+      return unsub;
+    } else {
+      const dates = weekDates.map(d => d.toLocaleDateString("ru-RU"));
+      const unsub = onSnapshot(collection(db, "checklist"), s => {
+        setChecks(s.docs.map(d=>({id:d.id,...d.data()})).filter(c => dates.includes(c.date)));
+      });
+      return unsub;
+    }
+  }, [db, dateKey, viewMode, weekOffset]);
+
+  // Scope models by team
+  const myTeamModelIds = (isChatter || isTeamLead)
+    ? new Set(teams.filter(tm=>(tm.memberIds||[]).includes(profile?.uid)).flatMap(tm=>tm.modelIds||[]))
+    : null;
+  const visibleModels = myTeamModelIds
+    ? models.filter(m => myTeamModelIds.has(m.id) && m.status !== "inactive")
+    : models.filter(m => m.status !== "inactive");
+
+  const allPlatforms = [
+    "Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans",
+    ...platforms.map(p=>p.name).filter(p=>!["Reddit","Twitter/X","TikTok","Instagram","Telegram","Discord","Facebook","YouTube","OnlyFans"].includes(p))
   ];
 
-  const isChecked = (modelId, platform) => checks.some(c => c.modelId === modelId && c.platform === platform && c.done);
+  const isChecked = (modelId, platform, date) => {
+    const d = date || dateKey;
+    return checks.some(c => c.modelId===modelId && c.platform===platform && c.date===d && c.done);
+  };
 
-  const toggle = async (modelId, modelName, platform) => {
-    const existing = checks.find(c => c.modelId === modelId && c.platform === platform);
+  const toggle = async (modelId, modelName, platform, date) => {
+    if (!canEdit) return;
+    const d = date || dateKey;
+    const existing = checks.find(c=>c.modelId===modelId && c.platform===platform && c.date===d);
     if (existing) {
-      await updateDoc(doc(db, "checklist", existing.id), { done: !existing.done, updatedBy: profile?.name, updatedAt: new Date().toISOString() });
+      await updateDoc(doc(db,"checklist",existing.id), { done:!existing.done, updatedAt: new Date().toISOString() });
     } else {
-      await addDoc(collection(db, "checklist"), { modelId, modelName, platform, done: true, date: dateKey, createdBy: profile?.name, userId: user.uid, createdAt: new Date().toISOString() });
+      await addDoc(collection(db,"checklist"), {
+        modelId, modelName, platform, done:true, date:d,
+        createdBy: profile?.name, userId: user.uid, createdAt: new Date().toISOString()
+      });
     }
   };
 
-  const addModel = async () => {
-    if (!newModelName.trim()) return;
-    await addDoc(collection(db, "models"), { name: newModelName.trim(), createdAt: new Date().toISOString() });
-    setNewModelName("");
-    setShowAddModel(false);
+  const getDayProgress = (modelId, date) => {
+    const done  = allPlatforms.filter(p=>isChecked(modelId,p,date)).length;
+    return { done, total: allPlatforms.length, pct: allPlatforms.length > 0 ? Math.round(done/allPlatforms.length*100) : 0 };
   };
 
-  const prevDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() - 1); setSelectedDate(d); };
-  const nextDay = () => { const d = new Date(selectedDate); d.setDate(d.getDate() + 1); setSelectedDate(d); };
-  const isToday = selectedDate.toLocaleDateString("ru-RU") === new Date().toLocaleDateString("ru-RU");
-
-  const getProgress = (modelId) => {
-    const done = allPlatforms.filter(p => isChecked(modelId, p)).length;
-    return { done, total: allPlatforms.length, pct: Math.round((done / allPlatforms.length) * 100) };
-  };
+  const todayStr = new Date().toLocaleDateString("ru-RU");
+  const isToday  = dateKey === todayStr;
 
   return (
     <div>
-      {/* Add model modal */}
-      <AnimatePresence>
-        {showAddModel && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              style={{ background: t.bgSecondary, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "28px", width: "360px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 600 }}>Новая модель</h3>
-                <button onClick={() => setShowAddModel(false)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
-              </div>
-              <input placeholder="Имя модели..." value={newModelName} onChange={e => setNewModelName(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addModel()} autoFocus
-                style={{ background: t.bgInput, color: t.text, border: `1px solid ${t.borderInput}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", width: "100%", fontFamily: "inherit" }} />
-              <button onClick={addModel}
-                style={{ marginTop: "16px", width: "100%", background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "10px", padding: "12px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
-                Добавить
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px", flexWrap: "wrap", gap: "12px" }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"22px", flexWrap:"wrap", gap:"12px" }}>
         <div>
-          <h1 style={{ fontSize: "24px", fontWeight: 700, color: t.text, marginBottom: "4px" }}>Чек-лист публикаций</h1>
-          <p style={{ color: t.textMuted, fontSize: "14px" }}>Отмечай где опубликовали по каждой модели</p>
+          <h1 style={{ fontSize:"24px", fontWeight:700, color:t.text, marginBottom:"4px" }}>Чек-лист публикаций</h1>
+          <p style={{ color:t.textMuted, fontSize:"14px" }}>
+            {visibleModels.length} моделей · {allPlatforms.length} платформ
+          </p>
         </div>
-        <button onClick={() => setShowAddModel(true)}
-          style={{ display: "flex", alignItems: "center", gap: "8px", background: "linear-gradient(135deg, #7c3aed, #db2777)", color: "#fff", border: "none", borderRadius: "10px", padding: "10px 20px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>
-          <Plus size={16} />Добавить модель
-        </button>
-      </div>
-
-      {/* Date selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "28px", background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "12px", padding: "14px 20px", width: "fit-content" }}>
-        <button onClick={prevDay} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", display: "flex" }}><ChevronLeft size={18} /></button>
-        <div style={{ textAlign: "center", minWidth: "160px" }}>
-          <div style={{ color: t.text, fontWeight: 600, fontSize: "15px" }}>
-            {DAYS[selectedDate.getDay()]}, {selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
-          </div>
-          {isToday && <div style={{ color: "#7c3aed", fontSize: "12px", marginTop: "2px" }}>Сегодня</div>}
-        </div>
-        <button onClick={nextDay} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer", display: "flex" }}><ChevronRight size={18} /></button>
-        {!isToday && (
-          <button onClick={() => setSelectedDate(new Date())}
-            style={{ background: "rgba(124,58,237,0.15)", border: "none", color: "#a78bfa", borderRadius: "8px", padding: "6px 12px", fontSize: "12px", cursor: "pointer" }}>
-            Сегодня
+        {/* View toggle */}
+        <div style={{ display:"flex", gap:"6px", background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"10px", padding:"4px" }}>
+          <button onClick={() => setViewMode("day")}
+            style={{ display:"flex", alignItems:"center", gap:"5px", padding:"7px 14px", borderRadius:"8px", border:"none", background:viewMode==="day"?"linear-gradient(135deg,#7c3aed,#db2877)":"transparent", color:viewMode==="day"?"#fff":t.textMuted, fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+            <Calendar size={13} />День
           </button>
-        )}
+          <button onClick={() => setViewMode("week")}
+            style={{ display:"flex", alignItems:"center", gap:"5px", padding:"7px 14px", borderRadius:"8px", border:"none", background:viewMode==="week"?"linear-gradient(135deg,#7c3aed,#db2877)":"transparent", color:viewMode==="week"?"#fff":t.textMuted, fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+            <BarChart2 size={13} />Неделя
+          </button>
+        </div>
       </div>
 
-      {/* Models */}
-      {loading ? (
-        <div style={{ color: t.textMuted, textAlign: "center", padding: "60px" }}>Загрузка...</div>
-      ) : models.length === 0 ? (
-        <div style={{ color: t.textMuted, textAlign: "center", padding: "60px" }}>
-          <CheckSquare size={40} style={{ marginBottom: "12px", opacity: 0.3 }} />
-          <div>Нет моделей. Добавь первую!</div>
+      {/* Day nav */}
+      {viewMode === "day" && (
+        <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"20px" }}>
+          <button onClick={() => { const d=new Date(selectedDate); d.setDate(d.getDate()-1); setSelectedDate(d); }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"8px", padding:"8px", cursor:"pointer", display:"flex" }}>
+            <ChevronLeft size={16}/>
+          </button>
+          <div style={{ color:t.text, fontWeight:600, fontSize:"15px", minWidth:"180px", textAlign:"center" }}>
+            {DAYS_SHORT[selectedDate.getDay()]}, {selectedDate.toLocaleDateString("ru-RU",{day:"numeric",month:"long"})}
+            {isToday && <span style={{ color:"#7c3aed", fontSize:"12px", marginLeft:"8px" }}>Сегодня</span>}
+          </div>
+          <button onClick={() => { const d=new Date(selectedDate); d.setDate(d.getDate()+1); setSelectedDate(d); }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"8px", padding:"8px", cursor:"pointer", display:"flex" }}>
+            <ChevronRight size={16}/>
+          </button>
+          {!isToday && (
+            <button onClick={() => setSelectedDate(new Date())}
+              style={{ background:"rgba(124,58,237,0.12)", border:"none", color:"#a78bfa", borderRadius:"8px", padding:"7px 14px", fontSize:"12px", cursor:"pointer" }}>
+              Сегодня
+            </button>
+          )}
         </div>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {models.map((model, mi) => {
-            const progress = getProgress(model.id);
+      )}
+
+      {/* Week nav */}
+      {viewMode === "week" && (
+        <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"20px" }}>
+          <button onClick={() => setWeekOffset(w=>w-1)}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"8px", padding:"8px", cursor:"pointer", display:"flex" }}>
+            <ChevronLeft size={16}/>
+          </button>
+          <div style={{ color:t.text, fontWeight:600, fontSize:"14px", minWidth:"200px", textAlign:"center" }}>
+            {weekDates[0].toLocaleDateString("ru-RU",{day:"numeric",month:"short"})} — {weekDates[6].toLocaleDateString("ru-RU",{day:"numeric",month:"short"})}
+          </div>
+          <button onClick={() => setWeekOffset(w=>w+1)}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"8px", padding:"8px", cursor:"pointer", display:"flex" }}>
+            <ChevronRight size={16}/>
+          </button>
+          {weekOffset !== 0 && (
+            <button onClick={() => setWeekOffset(0)}
+              style={{ background:"rgba(124,58,237,0.12)", border:"none", color:"#a78bfa", borderRadius:"8px", padding:"7px 14px", fontSize:"12px", cursor:"pointer" }}>
+              Эта неделя
+            </button>
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div style={{ color:t.textMuted, textAlign:"center", padding:"60px" }}>Загрузка...</div>
+      ) : visibleModels.length === 0 ? (
+        <div style={{ color:t.textMuted, textAlign:"center", padding:"60px" }}>
+          <CheckSquare size={36} style={{ marginBottom:"10px", opacity:0.3 }}/>
+          <div>Нет моделей</div>
+        </div>
+      ) : viewMode === "day" ? (
+        /* ── DAY VIEW ── */
+        <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+          {visibleModels.map((model, mi) => {
+            const prog = getDayProgress(model.id, dateKey);
+            const color = model.color || "#7c3aed";
             return (
-              <motion.div key={model.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: mi * 0.07 }}
-                style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px", overflow: "hidden" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <div style={{ width: "38px", height: "38px", borderRadius: "10px", background: "linear-gradient(135deg, #7c3aed, #db2777)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", fontWeight: 700, color: "#fff" }}>
-                      {model.name[0].toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{ color: t.text, fontWeight: 600, fontSize: "15px" }}>{model.name}</div>
-                      <div style={{ color: t.textMuted, fontSize: "12px" }}>{progress.done} из {progress.total} платформ</div>
-                    </div>
+              <motion.div key={model.id} initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }} transition={{ delay:mi*0.04 }}
+                style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"16px 18px", overflow:"hidden" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"10px" }}>
+                  <div style={{ width:"36px", height:"36px", borderRadius:"10px", background:`linear-gradient(135deg,${color},${color}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:model.emoji?"17px":"13px", fontWeight:700, color:"#fff", flexShrink:0 }}>
+                    {model.emoji || model.name[0].toUpperCase()}
                   </div>
-                  <div style={{ color: progress.pct === 100 ? "#10b981" : t.textMuted, fontSize: "14px", fontWeight: 700 }}>{progress.pct}%</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ color:t.text, fontWeight:600, fontSize:"14px" }}>{model.name}</div>
+                    <div style={{ color:t.textFaint, fontSize:"11px" }}>{prog.done}/{prog.total} платформ</div>
+                  </div>
+                  <div style={{ color:prog.pct===100?"#10b981":t.textMuted, fontSize:"14px", fontWeight:700 }}>
+                    {prog.pct === 100 ? "✅" : `${prog.pct}%`}
+                  </div>
                 </div>
-
-                <div style={{ height: "3px", background: t.border, borderRadius: "2px", marginBottom: "16px" }}>
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${progress.pct}%` }} transition={{ duration: 0.5 }}
-                    style={{ height: "100%", borderRadius: "2px", background: progress.pct === 100 ? "#10b981" : "linear-gradient(90deg, #7c3aed, #db2777)" }} />
+                {/* Progress bar */}
+                <div style={{ height:"3px", background:t.border, borderRadius:"2px", marginBottom:"12px" }}>
+                  <motion.div initial={{ width:0 }} animate={{ width:`${prog.pct}%` }} transition={{ duration:0.4 }}
+                    style={{ height:"100%", borderRadius:"2px", background:prog.pct===100?"#10b981":`linear-gradient(90deg,${color},${color}88)` }} />
                 </div>
-
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {/* Platform chips */}
+                <div style={{ display:"flex", flexWrap:"wrap", gap:"6px" }}>
                   {allPlatforms.map(platform => {
-                    const done = isChecked(model.id, platform);
+                    const done = isChecked(model.id, platform, dateKey);
                     return (
                       <motion.button key={platform} onClick={() => toggle(model.id, model.name, platform)}
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                        style={{
-                          display: "flex", alignItems: "center", gap: "6px", padding: "7px 12px",
-                          borderRadius: "8px", border: `1px solid ${done ? "#10b981" : t.border}`,
-                          background: done ? "rgba(16,185,129,0.12)" : t.bgCardHover,
-                          color: done ? "#10b981" : t.textMuted, cursor: "pointer", fontSize: "13px", fontWeight: 500,
-                        }}>
-                        {done ? <CheckSquare size={14} /> : <Square size={14} />}
+                        whileTap={{ scale:0.94 }}
+                        disabled={!canEdit}
+                        style={{ display:"flex", alignItems:"center", gap:"5px", padding:"5px 10px", borderRadius:"7px", border:`1px solid ${done?"#10b981":t.border}`, background:done?"rgba(16,185,129,0.1)":t.bgCardHover, color:done?"#10b981":t.textMuted, cursor:canEdit?"pointer":"default", fontSize:"12px", fontWeight:500, transition:"all 0.15s" }}>
+                        {done ? <CheckSquare size={12}/> : <Square size={12}/>}
                         {platform}
                       </motion.button>
                     );
@@ -170,6 +220,82 @@ export default function Checklist() {
               </motion.div>
             );
           })}
+        </div>
+      ) : (
+        /* ── WEEK VIEW ── */
+        <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"16px", overflow:"hidden" }}>
+          {/* Header row */}
+          <div style={{ display:"grid", gridTemplateColumns:"160px repeat(7,1fr)", borderBottom:`1px solid ${t.border}` }}>
+            <div style={{ padding:"10px 14px", color:t.textFaint, fontSize:"11px", fontWeight:700, textTransform:"uppercase" }}>Модель</div>
+            {weekDates.map((d, i) => {
+              const isT = d.toLocaleDateString("ru-RU") === todayStr;
+              return (
+                <div key={i} style={{ padding:"10px 8px", textAlign:"center", background:isT?"rgba(124,58,237,0.08)":"transparent", borderLeft:`1px solid ${t.border}` }}>
+                  <div style={{ color:isT?"#a78bfa":t.textMuted, fontSize:"11px", fontWeight:700 }}>{DAYS_SHORT[d.getDay()]}</div>
+                  <div style={{ color:isT?t.text:t.textFaint, fontSize:"13px", fontWeight:isT?700:400 }}>{d.getDate()}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Model rows */}
+          {visibleModels.map((model, mi) => {
+            const color = model.color || "#7c3aed";
+            return (
+              <div key={model.id} style={{ display:"grid", gridTemplateColumns:"160px repeat(7,1fr)", borderBottom: mi<visibleModels.length-1?`1px solid ${t.border}`:"none" }}
+                onMouseEnter={e => e.currentTarget.style.background=t.bgCardHover}
+                onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                {/* Model name */}
+                <div style={{ padding:"12px 14px", display:"flex", alignItems:"center", gap:"8px" }}>
+                  <div style={{ width:"28px", height:"28px", borderRadius:"8px", background:`linear-gradient(135deg,${color},${color}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:model.emoji?"13px":"11px", color:"#fff", fontWeight:700, flexShrink:0 }}>
+                    {model.emoji||model.name[0].toUpperCase()}
+                  </div>
+                  <span style={{ color:t.text, fontSize:"12px", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{model.name}</span>
+                </div>
+
+                {/* Day cells */}
+                {weekDates.map((d, di) => {
+                  const dk   = d.toLocaleDateString("ru-RU");
+                  const prog = getDayProgress(model.id, dk);
+                  const isT  = dk === todayStr;
+                  return (
+                    <div key={di} onClick={() => { setSelectedDate(d); setViewMode("day"); }}
+                      style={{ padding:"8px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", cursor:"pointer", borderLeft:`1px solid ${t.border}`, background:isT?"rgba(124,58,237,0.04)":"transparent" }}>
+                      {prog.total > 0 && (
+                        <>
+                          <div style={{ color:prog.pct===100?"#10b981":prog.pct>0?"#f59e0b":t.textFaint, fontSize:"12px", fontWeight:700 }}>
+                            {prog.pct === 100 ? "✅" : prog.pct > 0 ? `${prog.pct}%` : "—"}
+                          </div>
+                          {prog.pct > 0 && prog.pct < 100 && (
+                            <div style={{ width:"28px", height:"3px", background:t.border, borderRadius:"2px", marginTop:"3px" }}>
+                              <div style={{ width:`${prog.pct}%`, height:"100%", background:"#f59e0b", borderRadius:"2px" }} />
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* Footer totals */}
+          <div style={{ display:"grid", gridTemplateColumns:"160px repeat(7,1fr)", borderTop:`1px solid ${t.border}`, background:t.bgCardHover }}>
+            <div style={{ padding:"8px 14px", color:t.textFaint, fontSize:"11px", fontWeight:700, display:"flex", alignItems:"center" }}>Итого</div>
+            {weekDates.map((d, i) => {
+              const dk = d.toLocaleDateString("ru-RU");
+              const total = visibleModels.reduce((sum, m) => sum + getDayProgress(m.id, dk).done, 0);
+              const max   = visibleModels.length * allPlatforms.length;
+              return (
+                <div key={i} style={{ padding:"8px", textAlign:"center", borderLeft:`1px solid ${t.border}` }}>
+                  <span style={{ color:total===max&&max>0?"#10b981":total>0?"#a78bfa":t.textFaint, fontSize:"12px", fontWeight:600 }}>
+                    {total > 0 ? total : "—"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

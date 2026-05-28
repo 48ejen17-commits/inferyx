@@ -83,7 +83,7 @@ export const DEFAULT_PERMISSIONS = {
   team_lead: {
     nav_dashboard: true, nav_checklist: true, nav_chat: true,
     nav_schedule: true,  nav_content: false,  nav_models: true,
-    nav_team: true,      nav_tasks: true,     nav_analytics: false,
+    nav_team: true,      nav_tasks: false,    nav_analytics: false,
     nav_settings: true,  nav_admin: false,    nav_team_panel: true,
     tasks_create_any: false, tasks_assign_any: false, tasks_see_all: false,
     models_see_all: false,   content_access: false,   settings_full: false,

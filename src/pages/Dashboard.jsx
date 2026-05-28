@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import LiveBackground from "../components/LiveBackground";
 import {
   collection, onSnapshot, orderBy, query, limit,
   setDoc, doc, getDoc, updateDoc, addDoc, where
@@ -71,7 +70,7 @@ const GROUND_Y = 185;       // where the ground line is
 const PW = 26, PH = 34;     // player width / height
 const OW = 16;              // obstacle width
 
-function DinoGame({ profile, db, user }) {
+function DinoGame({ profile, db, user, teamMemberIds }) {
   const canvasRef = useRef(null);
   const stateRef = useRef(null);
   const rafRef = useRef(null);
@@ -100,16 +99,18 @@ function DinoGame({ profile, db, user }) {
 
   if (!stateRef.current) stateRef.current = makeState();
 
-  // leaderboard
+  // leaderboard — only team members
   useEffect(() => {
     if (!db) return;
     return onSnapshot(collection(db, "game_scores"), snap => {
-      setLeaderboard(
-        snap.docs.map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => b.score - a.score).slice(0, 8)
-      );
+      let scores = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Filter by team if restricted
+      if (teamMemberIds) {
+        scores = scores.filter(s => teamMemberIds.has(s.id));
+      }
+      setLeaderboard(scores.sort((a, b) => b.score - a.score).slice(0, 8));
     });
-  }, [db]);
+  }, [db, teamMemberIds]);
 
   const saveScore = useCallback(async (score) => {
     if (!user?.uid || !db) return;
@@ -1230,8 +1231,6 @@ export default function Dashboard() {
 
   return (
     <div style={{ position: "relative" }}>
-      <LiveBackground />
-      <ConfettiOverlay active={false} />
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ marginBottom: "28px" }}>
         <h1 style={{ fontSize: "26px", fontWeight: 700, color: t.text, marginBottom: "6px" }}>
@@ -1288,7 +1287,7 @@ export default function Dashboard() {
               <Zap size={16} style={{ color:"#7c3aed" }} />
               <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
             </div>
-            <DinoGame profile={profile} db={db} user={user} />
+            <DinoGame profile={profile} db={db} user={user} teamMemberIds={myTeamMemberIds} />
           </motion.div>
         </div>
       )}
@@ -1383,7 +1382,7 @@ export default function Dashboard() {
               <Zap size={16} style={{ color:"#7c3aed" }} />
               <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
             </div>
-            <DinoGame profile={profile} db={db} user={user} />
+            <DinoGame profile={profile} db={db} user={user} teamMemberIds={myTeamMemberIds} />
           </motion.div>
         </div>
       )}
@@ -1481,7 +1480,7 @@ export default function Dashboard() {
               <Zap size={18} style={{ color:"#7c3aed" }} />
               <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
             </div>
-            <DinoGame profile={profile} db={db} user={user} />
+            <DinoGame profile={profile} db={db} user={user} teamMemberIds={myTeamMemberIds} />
           </motion.div>
         </div>
       )}

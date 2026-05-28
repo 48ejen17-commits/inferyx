@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { collection, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
 import { useAuth, ROLES } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
-import { Plus, Trash2, Settings as SettingsIcon, Globe, User, Moon, Sun, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Settings as SettingsIcon, Globe, User, Moon, Sun, AlertTriangle, Shield } from "lucide-react";
 
 export default function Settings() {
   const { db, profile, user } = useAuth();
@@ -22,16 +22,19 @@ export default function Settings() {
   const isTeamLead = profile?.role === ROLES.TEAM_LEAD;
 
   const allTabs = [
-    { id: "platforms",  label: "Платформы",    icon: Globe,        restricted: true  },
-    { id: "models",     label: "Модели",        icon: User,         restricted: true  },
-    { id: "appearance", label: "Внешний вид",   icon: mode === "dark" ? Moon : Sun, restricted: false },
-    { id: "account",    label: "Аккаунт",       icon: SettingsIcon, restricted: false },
+    { id: "platforms",  label: "Платформы",  icon: Globe,                          restricted: true,  ownerOnly: false },
+    { id: "models",     label: "Модели",      icon: User,                           restricted: true,  ownerOnly: false },
+    { id: "appearance", label: "Внешний вид", icon: mode === "dark" ? Moon : Sun,   restricted: false, ownerOnly: false },
+    { id: "account",    label: "Аккаунт",     icon: SettingsIcon,                   restricted: false, ownerOnly: false },
+    { id: "site",       label: "Управление",  icon: Shield,                         restricted: true,  ownerOnly: true  },
   ];
 
   // Chatter and team_lead only see appearance + account
   const tabs = (isChatter || isTeamLead)
     ? allTabs.filter(tb => !tb.restricted)
-    : allTabs;
+    : isOwner
+    ? allTabs
+    : allTabs.filter(tb => !tb.ownerOnly);
 
   // Set default tab based on role
   useEffect(() => {
@@ -264,6 +267,74 @@ export default function Settings() {
           </div>
         </motion.div>
       )}
+      {/* Site management — owner only */}
+      {activeTab === "site" && isOwner && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+            {/* Quick links */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
+              <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "16px" }}>⚡ Быстрые действия</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                {[
+                  { label: "👥 Управление пользователями", desc: "Создать, удалить, изменить роли", href: "/users" },
+                  { label: "🏆 Команды",                   desc: "Создать команды, назначить модели", href: "/teams" },
+                  { label: "📊 Admin Panel",               desc: "Статистика, финансы, логи",        href: "/admin" },
+                  { label: "📋 Задачи",                    desc: "Все задачи команды",               href: "/tasks" },
+                ].map((item, i) => (
+                  <a key={i} href={item.href}
+                    style={{ display: "block", padding: "14px 16px", background: t.bgCardHover, border: `1px solid ${t.border}`, borderRadius: "12px", textDecoration: "none", cursor: "pointer" }}>
+                    <div style={{ color: t.text, fontSize: "13px", fontWeight: 600, marginBottom: "3px" }}>{item.label}</div>
+                    <div style={{ color: t.textMuted, fontSize: "12px" }}>{item.desc}</div>
+                  </a>
+                ))}
+              </div>
+            </div>
+
+            {/* Permissions guide */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
+              <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "14px" }}>🔐 Система разрешений</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {[
+                  { role: "Owner",    color: "#f59e0b", perms: "Полный доступ ко всему, включая Admin Panel и управление пользователями" },
+                  { role: "Admin",    color: "#7c3aed", perms: "Всё кроме Admin Panel. Может менять разрешения чаттерам" },
+                  { role: "Team Lead",color: "#10b981", perms: "Видит свою команду и модели. Проверяет отчёты смен" },
+                  { role: "Chatter",  color: "#64748b", perms: "Только свои задачи, смены, команда. Без контента и аналитики" },
+                ].map((r, i) => (
+                  <div key={i} style={{ display: "flex", gap: "12px", padding: "12px 14px", background: t.bgCardHover, borderRadius: "10px" }}>
+                    <span style={{ background: `${r.color}20`, color: r.color, fontSize: "11px", fontWeight: 700, padding: "2px 10px", borderRadius: "20px", flexShrink: 0, height: "fit-content", marginTop: "1px" }}>{r.role}</span>
+                    <span style={{ color: t.textMuted, fontSize: "13px", lineHeight: "1.5" }}>{r.perms}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: "12px", padding: "12px 14px", background: "rgba(124,58,237,0.07)", border: "1px solid rgba(124,58,237,0.15)", borderRadius: "10px" }}>
+                <div style={{ color: "#a78bfa", fontSize: "12px" }}>
+                  💡 Разрешения каждого пользователя можно настроить индивидуально во вкладке <strong>Пользователи</strong> — нажми кнопку «Права» напротив нужного человека.
+                </div>
+              </div>
+            </div>
+
+            {/* Firebase info */}
+            <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
+              <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "14px" }}>🔧 Техническая информация</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {[
+                  { label: "Firebase проект", value: "jgnn-3d5e4" },
+                  { label: "Хостинг",          value: "Vercel (inferyx.org)" },
+                  { label: "Версия",            value: "v3.0" },
+                  { label: "Поддержка",         value: "@mars_cd в Telegram" },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 12px", background: t.bgCardHover, borderRadius: "8px" }}>
+                    <span style={{ color: t.textMuted, fontSize: "13px" }}>{item.label}</span>
+                    <span style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{item.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
     </div>
   );
 }
