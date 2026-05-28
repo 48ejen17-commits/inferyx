@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { collection, onSnapshot, query, orderBy, limit, addDoc, getDocs } from "firebase/firestore";
-import { useAuth, ROLE_COLORS, ROLE_LABELS } from "../context/AuthContext";
+import { useAuth, ROLE_COLORS, ROLE_LABELS, ROLE_LABELS_DISPLAY } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import {
   Shield, Activity, Users, TrendingUp, FileText, Calculator,
@@ -53,6 +53,7 @@ function StatCard({ icon: Icon, label, value, sub, color, t }) {
 // ── TABS ──────────────────────────────────────────────────────────────────────
 const TABS = [
   { key: "overview",     label: "Обзор",          icon: BarChart2 },
+  { key: "online",       label: "Онлайн",          icon: Users },
   { key: "logs",         label: "Логи",            icon: Activity },
   { key: "reddit",       label: "Reddit Stats",    icon: TrendingUp },
   { key: "finance",      label: "Финансы",         icon: DollarSign },
@@ -241,6 +242,10 @@ export default function Admin() {
       )}
 
       {/* ── LOGS ─────────────────────────────────────────────────────────────── */}
+      {tab === "online" && (
+        <OnlineTab users={users} t={t} />
+      )}
+
       {tab === "logs" && (
         <LogsTab logs={logs} users={users} entries={entries} tasks={tasks} grid={grid} t={t} />
       )}
@@ -374,6 +379,209 @@ function LogsTab({ logs, users, entries, tasks, grid, t }) {
 }
 
 
+
+// ── ONLINE TAB ────────────────────────────────────────────────────────────────
+function OnlineTab({ users, t }) {
+  const [search,     setSearch]     = useState("");
+  const [filterRole, setFilterRole] = useState("all");
+  const [sortBy,     setSortBy]     = useState("status"); // status | name | last
+  const [now,        setNow]        = useState(Date.now());
+
+  // Live clock for "X минут назад"
+  useEffect(() => {
+    const iv = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const fmtAgo = (iso) => {
+    if (!iso) return "Никогда";
+    const diff = now - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    const h = Math.floor(diff / 3600000);
+    const d = Math.floor(diff / 86400000);
+    if (m < 1)  return "Только что";
+    if (m < 60) return `${m} мин назад`;
+    if (h < 24) return `${h} ч назад`;
+    if (d < 7)  return `${d} дн назад`;
+    return new Date(iso).toLocaleDateString("ru-RU", { day:"numeric", month:"short" });
+  };
+
+  const fmtDateTime = (iso) => {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleString("ru-RU", {
+      day:"2-digit", month:"2-digit", year:"numeric",
+      hour:"2-digit", minute:"2-digit"
+    });
+  };
+
+  const isOnline = (u) => {
+    if (!u.isOnline) return false;
+    if (!u.lastActiveAt) return false;
+    // Consider online if last seen < 2 min ago
+    return (now - new Date(u.lastActiveAt).getTime()) < 120000;
+  };
+
+  const getStatus = (u) => {
+    if (isOnline(u)) return "online";
+    if (!u.lastActiveAt) return "never";
+    const diff = now - new Date(u.lastActiveAt).getTime();
+    if (diff < 3600000)  return "recent";   // < 1h
+    if (diff < 86400000) return "today";    // < 24h
+    return "offline";
+  };
+
+  const STATUS_CONFIG = {
+    online:  { label:"В сети",        color:"#10b981", dot:"#10b981", order:0 },
+    recent:  { label:"Недавно",       color:"#f59e0b", dot:"#f59e0b", order:1 },
+    today:   { label:"Сегодня",       color:"#0ea5e9", dot:"#0ea5e9", order:2 },
+    offline: { label:"Не в сети",     color:"#475569", dot:"#475569", order:3 },
+    never:   { label:"Не заходил",    color:"#334155", dot:"#334155", order:4 },
+  };
+
+  const filtered = users
+    .filter(u => {
+      if (filterRole !== "all" && u.role !== filterRole) return false;
+      if (search && !u.name?.toLowerCase().includes(search.toLowerCase()) &&
+          !u.role?.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "status") {
+        const oa = STATUS_CONFIG[getStatus(a)].order;
+        const ob = STATUS_CONFIG[getStatus(b)].order;
+        if (oa !== ob) return oa - ob;
+      }
+      if (sortBy === "name") return (a.name||"").localeCompare(b.name||"");
+      if (sortBy === "last") {
+        const ta = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0;
+        const tb = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0;
+        return tb - ta;
+      }
+      return (a.name||"").localeCompare(b.name||"");
+    });
+
+  const onlineCount = users.filter(u => isOnline(u)).length;
+  const todayCount  = users.filter(u => { const s = getStatus(u); return s === "online" || s === "recent" || s === "today"; }).length;
+
+  return (
+    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}>
+
+      {/* Summary */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))", gap:"12px", marginBottom:"20px" }}>
+        {[
+          { label:"🟢 Сейчас онлайн", val:onlineCount,          color:"#10b981" },
+          { label:"📅 Были сегодня",  val:todayCount,            color:"#0ea5e9" },
+          { label:"👥 Всего",         val:users.length,          color:"#7c3aed" },
+          { label:"😴 Не в сети",     val:users.length-todayCount, color:"#475569" },
+        ].map((s,i) => (
+          <div key={i} style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"16px" }}>
+            <div style={{ color:t.textMuted, fontSize:"11px", marginBottom:"5px" }}>{s.label}</div>
+            <div style={{ color:s.color, fontSize:"24px", fontWeight:800 }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap", alignItems:"center" }}>
+        {/* Search */}
+        <div style={{ position:"relative", flex:1, minWidth:"200px" }}>
+          <Search size={14} style={{ position:"absolute", left:"12px", top:"50%", transform:"translateY(-50%)", color:t.textMuted, pointerEvents:"none" }}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Поиск по имени или роли..."
+            style={{ width:"100%", background:t.bgCard, color:t.text, border:`1px solid ${t.border}`, borderRadius:"10px", padding:"9px 12px 9px 34px", fontSize:"13px", outline:"none", fontFamily:"inherit" }}/>
+        </div>
+
+        {/* Role filter */}
+        <select value={filterRole} onChange={e=>setFilterRole(e.target.value)}
+          style={{ background:t.bgCard, color:t.text, border:`1px solid ${t.border}`, borderRadius:"10px", padding:"9px 12px", fontSize:"13px", outline:"none", fontFamily:"inherit" }}>
+          <option value="all">Все роли</option>
+          <option value="owner">Owner</option>
+          <option value="admin">Admin</option>
+          <option value="project_manager">PM</option>
+          <option value="team_lead">Team Lead</option>
+          <option value="chatter">Chatter</option>
+        </select>
+
+        {/* Sort */}
+        <div style={{ display:"flex", gap:"4px" }}>
+          {[{v:"status",l:"По статусу"},{v:"name",l:"По имени"},{v:"last",l:"По времени"}].map(s => (
+            <button key={s.v} onClick={() => setSortBy(s.v)}
+              style={{ padding:"8px 12px", borderRadius:"8px", border:`1px solid ${sortBy===s.v?"#7c3aed":t.border}`, background:sortBy===s.v?"rgba(124,58,237,0.15)":t.bgCard, color:sortBy===s.v?"#a78bfa":t.textMuted, fontSize:"12px", fontWeight:sortBy===s.v?700:400, cursor:"pointer" }}>
+              {s.l}
+            </button>
+          ))}
+        </div>
+
+        <span style={{ color:t.textFaint, fontSize:"12px", flexShrink:0 }}>{filtered.length} чел.</span>
+      </div>
+
+      {/* Table */}
+      <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"16px", overflow:"hidden" }}>
+        {/* Header */}
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 120px 180px 200px 150px", gap:"8px", padding:"11px 18px", borderBottom:`1px solid ${t.border}`, background:t.bgCardHover }}>
+          {["Пользователь","Роль","Статус","Последний визит","Дата регистрации"].map((h,i) => (
+            <div key={i} style={{ color:t.textFaint, fontSize:"11px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.4px" }}>{h}</div>
+          ))}
+        </div>
+
+        {filtered.length === 0 ? (
+          <div style={{ padding:"40px", textAlign:"center", color:t.textFaint }}>Нет пользователей</div>
+        ) : filtered.map((u, i) => {
+          const status = getStatus(u);
+          const sc     = STATUS_CONFIG[status];
+          const rc     = ROLE_COLORS[u.role] || "#64748b";
+
+          return (
+            <div key={u.id}
+              style={{ display:"grid", gridTemplateColumns:"2fr 120px 180px 200px 150px", gap:"8px", padding:"12px 18px", borderBottom:i<filtered.length-1?`1px solid ${t.border}`:"none", alignItems:"center" }}
+              onMouseEnter={e => e.currentTarget.style.background = t.bgCardHover}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+
+              {/* User */}
+              <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                <div style={{ position:"relative", flexShrink:0 }}>
+                  <div style={{ width:"36px", height:"36px", borderRadius:"10px", background:`linear-gradient(135deg,${rc},${rc}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:u.avatarEmoji?"16px":"13px", fontWeight:700, color:"#fff" }}>
+                    {u.avatarEmoji || (u.name||"?")[0].toUpperCase()}
+                  </div>
+                  {/* Online dot */}
+                  <div style={{ position:"absolute", bottom:"-2px", right:"-2px", width:"11px", height:"11px", borderRadius:"50%", background:sc.dot, border:`2px solid ${t.bgCard}`, boxShadow:status==="online"?`0 0 6px ${sc.dot}`:"none" }}/>
+                </div>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ color:t.text, fontSize:"13px", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.name || "—"}</div>
+                  <div style={{ color:t.textFaint, fontSize:"11px" }}>{u.email || "—"}</div>
+                </div>
+              </div>
+
+              {/* Role */}
+              <div>
+                <span style={{ background:`${rc}18`, color:rc, fontSize:"11px", fontWeight:700, padding:"3px 8px", borderRadius:"20px", textTransform:"uppercase", letterSpacing:"0.3px" }}>
+                  {ROLE_LABELS_DISPLAY[u.role] || u.role || "—"}
+                </span>
+              </div>
+
+              {/* Status */}
+              <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:sc.dot, boxShadow:status==="online"?`0 0 5px ${sc.dot}`:"none", flexShrink:0 }}/>
+                <span style={{ color:sc.color, fontSize:"12px", fontWeight:600 }}>{sc.label}</span>
+              </div>
+
+              {/* Last seen */}
+              <div>
+                <div style={{ color:t.text, fontSize:"12px", fontWeight:500 }}>{fmtAgo(u.lastActiveAt)}</div>
+                <div style={{ color:t.textFaint, fontSize:"11px", marginTop:"1px" }}>{fmtDateTime(u.lastActiveAt)}</div>
+              </div>
+
+              {/* Registered */}
+              <div style={{ color:t.textMuted, fontSize:"12px" }}>
+                {u.createdAt ? new Date(u.createdAt).toLocaleDateString("ru-RU", {day:"numeric",month:"short",year:"numeric"}) : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
 
 // ── INFO TOOLTIP ──────────────────────────────────────────────────────────────
 function InfoTip({ content, t }) {
