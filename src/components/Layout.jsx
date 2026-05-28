@@ -600,76 +600,60 @@ function LogoEasterEgg() {
   const phraseTimerRef = useRef(null);
 
   const PHRASES = [
-    // Хватит, работай
-    "Хватит кликать, пора работать 😤",
-    "Стоп. Открой задачи 📋",
-    "Это не кнопка прокрастинации 🙅",
-    "Ты точно уже поработал сегодня?",
-    "Дедлайн сам себя не сдвинет 💀",
-    "Закрой YouTube и работай 😂",
-    "Серьёзно? Снова сюда жмёшь?",
-    "ОК ОК всё хватит 😾",
-    "Иди. Работать. Сейчас 🫵",
-    "Вот это уже перебор кликов",
-    // Мотивашки
-    "Ты сильнее чем думаешь 💪",
-    "Сегодня твой день 🔥",
-    "Каждый пост — шаг к цели 📈",
-    "Работай пока они спят 🌙",
-    "Успех любит настойчивых ⚡",
-    "Не останавливайся сейчас 🏆",
-    "Маленькие шаги — большой результат",
-    "Верь в процесс 🧠",
-    "Сделай сейчас — отдохни потом",
-    "Ещё один пост и ты красавчик 😎",
-    "Команда смотрит на тебя 👀",
-    "Лучшее время начать — сейчас",
-    "Будущий ты скажет спасибо",
-    "Усердие бьёт талант каждый раз",
-    // Юмор
-    "Кофе сам себя не нальёт ☕",
-    "Это не баг, это фича 🐛",
-    "404: мотивация не найдена 🔍",
-    "Ctrl+Z в жизни не работает увы",
-    "Ещё 5 минут... уже 3 часа 😅",
-    "Главное — не заснуть на смене 😴",
-    "Я не прокрастинирую — я думаю 🤔",
-    "Баг или фича — философский вопрос",
-    "Продуктивность: 10% работа 90% вкладки",
-    "Перезагрузи себя как компьютер 🔄",
-    "Система в норме. Оператор — нет 😂",
-    "Ошибка 418: я чайник 🫖",
-    "Всё под контролем... наверное",
-    "Это рабочее время? Похоже да",
-    "Сначала кофе, потом вопросы ☕",
-    "Ты это можешь. Наверное 🤷",
-    "Почему работает — не трогай 🙏",
-    "Stack overflow в голове? Ясно",
-    "Удали кеш — авось поможет",
-    "Инфа 100% — иди работать",
-    // Рабочие
-    "Проверь план на сегодня 📋",
-    "Как там команда? Не потерялись?",
-    "Не забудь отметить посты ✅",
-    "Синхронизируйся с тим-лидом 🔄",
-    "Время = деньги. Вперёд! 💰",
-    "Отдохнул? Теперь работай 😈",
-    "Командный дух решает всё 🤝",
-    "Проверь уведомления 🔔",
-    "Новых DM не было? Плохо 📩",
-    "Модели сами себя не ведут",
-    "График на неделю уже готов?",
-    // Философия и прочее
-    "Всё будет хорошо. Скорее всего 🌈",
-    "Делай что любишь или полюби что делаешь",
-    "Жизнь слишком коротка для скуки ✨",
-    "INFERYX — не просто платформа 😎",
-    "Деньги не спят. И ты не спи 💸",
-    "Каждый великий начинал с нуля",
-    "Удача = подготовка + момент",
-    "Думай как овнер. Работай как чаттер",
-    "Рим не за день построили. Но начали",
-    "В команде сила. Вперёд! 🚀",
+    // Стоп кликать
+    "иди работай 💀",
+    "ты серьёзно?",
+    "bro...",
+    "ну и зачем",
+    "опять ты",
+    "не, ну ладно",
+    "окей бумер",
+    "это уже странно",
+    "тебе норм?",
+    "go touch grass",
+    "skill issue",
+    "L + ratio",
+    "no cap это кринж",
+    "вот это ерунда",
+    "я устал от тебя",
+    // Мотивация по-молодёжному
+    "W rizz = W результат 🔥",
+    "lets gooo 🚀",
+    "grind never stops",
+    "we eating today 💸",
+    "stay locked in",
+    "no days off",
+    "built different",
+    "the bag won't chase itself",
+    "sigma grindset активирован",
+    "время делать деньги fr",
+    "chad move — открой задачи",
+    "главный герой не отдыхает",
+    "on god иди постить",
+    "твой erfolg ждёт",
+    "catch flights not feelings",
+    // Рабочие с юмором
+    "посты сами себя не напишут 😭",
+    "редит не спит пока ты тут",
+    "модели ждут, ты здесь кликаешь",
+    "дедлайн ближе чем ты думаешь",
+    "один клик — одна потеря денег",
+    "твой тим лид всё видит 👁",
+    "конкуренты уже постят, а ты?",
+    "это не кнопка богатства сорри",
+    "ладно иди, заслужил перерыв",
+    "стата не растёт от кликов сюда",
+    // Абсурд
+    "inferyx тебя любит но иди работай",
+    "нажми ещё раз я не против",
+    "это пасхалка а не прокрастинация",
+    "ты нашёл секрет поздравляю теперь иди",
+    "404: мотивация временно недоступна",
+    "система в порядке. оператор — нет",
+    "reboot yourself fr",
+    "main character energy lost",
+    "touch the posts bro",
+    "вернись когда будешь ready",
   ];
 
   const handleClick = () => {
@@ -677,10 +661,44 @@ function LogoEasterEgg() {
     setPhrase(random);
     setHorns(true);
     setShowPhrase(true);
+
+    // Meow sound via Web Audio
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const t = ctx.currentTime;
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = ctx.createBiquadFilter();
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      filter.type = "bandpass";
+      filter.frequency.value = 1200;
+      filter.Q.value = 8;
+
+      // Мяу — характерный подъём и спуск
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(400, t);
+      osc.frequency.exponentialRampToValueAtTime(900, t + 0.1);
+      osc.frequency.exponentialRampToValueAtTime(600, t + 0.25);
+      osc.frequency.exponentialRampToValueAtTime(450, t + 0.4);
+
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.03);
+      gain.gain.setValueAtTime(0.15, t + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+
+      osc.start(t);
+      osc.stop(t + 0.5);
+    } catch {}
+
     clearTimeout(timerRef.current);
     clearTimeout(phraseTimerRef.current);
     timerRef.current = setTimeout(() => setHorns(false), 2000);
-    phraseTimerRef.current = setTimeout(() => setShowPhrase(false), 2800);
+    phraseTimerRef.current = setTimeout(() => setShowPhrase(false), 2500);
   };
 
   useEffect(() => () => {
@@ -695,7 +713,6 @@ function LogoEasterEgg() {
         whileTap={{ scale: 0.92 }}
         style={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "baseline", gap: "5px" }}>
 
-        {/* Рожки */}
         <AnimatePresence>
           {horns && (
             <motion.div
@@ -714,7 +731,6 @@ function LogoEasterEgg() {
         <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", letterSpacing: "0.5px" }}>v3.0</span>
       </motion.div>
 
-      {/* Фраза — вписана под лого, не выходит за экран */}
       <AnimatePresence>
         {showPhrase && (
           <motion.div
