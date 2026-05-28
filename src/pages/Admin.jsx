@@ -1256,6 +1256,221 @@ function CalculatorTab({ users, entries, t }) {
   );
 }
 
+// ── FINANCE TAB ───────────────────────────────────────────────────────────────
+function FinanceTab({ db, t }) {
+  const [entries,    setEntries]    = useState([]);
+  const [showForm,   setShowForm]   = useState(false);
+  const [editEntry,  setEditEntry]  = useState(null);
+  const [filterPeriod, setFilterPeriod] = useState(30);
+  const [saving,     setSaving]     = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
+
+  const emptyForm = { date: new Date().toISOString().split("T")[0], type: "income", amount: "", description: "", tag: "", note: "" };
+  const [form, setForm] = useState(emptyForm);
+
+  useEffect(() => {
+    return onSnapshot(query(collection(db, "finance_entries"), orderBy("date", "desc")),
+      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [db]);
+
+  const save = async () => {
+    if (!form.amount || !form.description) return;
+    setSaving(true);
+    try {
+      const data = { ...form, amount: parseFloat(form.amount) || 0, updatedAt: new Date().toISOString() };
+      if (editEntry) {
+        await import("firebase/firestore").then(m => m.updateDoc(m.doc(db, "finance_entries", editEntry.id), data));
+      } else {
+        await addDoc(collection(db, "finance_entries"), { ...data, createdAt: new Date().toISOString() });
+      }
+      setForm(emptyForm); setShowForm(false); setEditEntry(null);
+    } catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    await import("firebase/firestore").then(m => m.deleteDoc(m.doc(db, "finance_entries", id)));
+    setConfirmDel(null);
+  };
+
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - filterPeriod);
+  const filtered = entries.filter(e => !e.date || new Date(e.date) >= cutoff);
+  const income  = filtered.filter(e => e.type === "income").reduce((s,e) => s+(e.amount||0), 0);
+  const expense = filtered.filter(e => e.type === "expense").reduce((s,e) => s+(e.amount||0), 0);
+  const profit  = income - expense;
+
+  const byTag = Object.entries(filtered.reduce((acc,e) => {
+    const k = e.tag || "Без тега";
+    if (!acc[k]) acc[k] = { income:0, expense:0 };
+    if (e.type==="income") acc[k].income += e.amount||0;
+    else acc[k].expense += e.amount||0;
+    return acc;
+  }, {})).sort((a,b) => (b[1].income+b[1].expense)-(a[1].income+a[1].expense));
+
+  const inputS = { background:t.bgInput, color:t.text, border:`1px solid ${t.border}`, borderRadius:"10px", padding:"10px 14px", fontSize:"13px", outline:"none", fontFamily:"inherit", width:"100%" };
+
+  return (
+    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}>
+      <div style={{ display:"flex", gap:"10px", marginBottom:"20px", flexWrap:"wrap", alignItems:"center" }}>
+        <div style={{ display:"flex", gap:"6px" }}>
+          {[7,14,30,90,365].map(d => (
+            <button key={d} onClick={() => setFilterPeriod(d)}
+              style={{ padding:"7px 12px", borderRadius:"8px", border:`1px solid ${filterPeriod===d?"#7c3aed":t.border}`, background:filterPeriod===d?"rgba(124,58,237,0.15)":t.bgCard, color:filterPeriod===d?"#a78bfa":t.textMuted, fontSize:"12px", fontWeight:filterPeriod===d?700:400, cursor:"pointer" }}>
+              {d===365?"Год":`${d}д`}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex:1 }} />
+        <button onClick={() => { setForm({...emptyForm,type:"expense"}); setEditEntry(null); setShowForm(true); }}
+          style={{ display:"flex", alignItems:"center", gap:"6px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", borderRadius:"10px", padding:"9px 14px", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+          <Minus size={13}/>Расход
+        </button>
+        <button onClick={() => { setForm({...emptyForm,type:"income"}); setEditEntry(null); setShowForm(true); }}
+          style={{ display:"flex", alignItems:"center", gap:"6px", background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.25)", color:"#10b981", borderRadius:"10px", padding:"9px 14px", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>
+          <Plus size={13}/>Доход
+        </button>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px", marginBottom:"16px" }}>
+        {[
+          { label:"Доходы",  value:`$${income.toLocaleString()}`,  color:"#10b981", bg:"rgba(16,185,129,0.08)",  border:"rgba(16,185,129,0.2)",  icon:"📈", count:filtered.filter(e=>e.type==="income").length },
+          { label:"Расходы", value:`$${expense.toLocaleString()}`, color:"#ef4444", bg:"rgba(239,68,68,0.08)",   border:"rgba(239,68,68,0.2)",   icon:"📉", count:filtered.filter(e=>e.type==="expense").length },
+          { label:"Прибыль", value:`${profit>=0?"+":""}$${profit.toLocaleString()}`, color:profit>=0?"#10b981":"#ef4444", bg:profit>=0?"rgba(16,185,129,0.08)":"rgba(239,68,68,0.08)", border:profit>=0?"rgba(16,185,129,0.2)":"rgba(239,68,68,0.2)", icon:profit>=0?"✅":"⚠️", count:filtered.length },
+        ].map((s,i) => (
+          <div key={i} style={{ background:s.bg, border:`1px solid ${s.border}`, borderRadius:"14px", padding:"16px" }}>
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"5px" }}>{s.label}</div>
+                <div style={{ color:s.color, fontSize:"24px", fontWeight:800 }}>{s.value}</div>
+                <div style={{ color:t.textFaint, fontSize:"11px", marginTop:"3px" }}>{s.count} операций</div>
+              </div>
+              <span style={{ fontSize:"22px" }}>{s.icon}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 220px", gap:"14px", marginBottom:"14px" }}>
+        <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"18px" }}>
+          <div style={{ color:t.textMuted, fontSize:"12px", fontWeight:600, marginBottom:"10px" }}>По тегам</div>
+          {byTag.length === 0 ? <div style={{ color:t.textFaint, fontSize:"12px" }}>Нет данных</div> : byTag.slice(0,6).map(([tag,data],i) => (
+            <div key={tag} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:i<byTag.slice(0,6).length-1?`1px solid ${t.border}`:"none" }}>
+              <span style={{ color:t.textMuted, fontSize:"12px" }}>#{tag}</span>
+              <div style={{ display:"flex", gap:"10px" }}>
+                {data.income>0&&<span style={{ color:"#10b981", fontSize:"12px" }}>+${data.income.toFixed(0)}</span>}
+                {data.expense>0&&<span style={{ color:"#ef4444", fontSize:"12px" }}>-${data.expense.toFixed(0)}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"18px" }}>
+          <div style={{ color:t.textMuted, fontSize:"12px", fontWeight:600, marginBottom:"10px" }}>Средние показатели</div>
+          {[
+            { label:"Ср. доход", val:filtered.filter(e=>e.type==="income").length ? `$${(income/filtered.filter(e=>e.type==="income").length).toFixed(0)}` : "—" },
+            { label:"Ср. расход", val:filtered.filter(e=>e.type==="expense").length ? `$${(expense/filtered.filter(e=>e.type==="expense").length).toFixed(0)}` : "—" },
+            { label:"Маржа", val:income>0?`${((profit/income)*100).toFixed(1)}%`:"—" },
+          ].map((r,i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"7px 0", borderBottom:i<2?`1px solid ${t.border}`:"none" }}>
+              <span style={{ color:t.textMuted, fontSize:"12px" }}>{r.label}</span>
+              <span style={{ color:t.text, fontSize:"13px", fontWeight:700 }}>{r.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", overflow:"hidden" }}>
+        <div style={{ padding:"12px 18px", borderBottom:`1px solid ${t.border}`, display:"flex", justifyContent:"space-between" }}>
+          <span style={{ color:t.text, fontSize:"14px", fontWeight:600 }}>Все операции</span>
+          <span style={{ color:t.textFaint, fontSize:"12px" }}>{filtered.length} записей</span>
+        </div>
+        <div style={{ maxHeight:"380px", overflowY:"auto" }}>
+          {filtered.length === 0 ? (
+            <div style={{ padding:"40px", textAlign:"center", color:t.textFaint }}>Нет записей. Добавь доход или расход.</div>
+          ) : filtered.map((e,i) => (
+            <div key={e.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"11px 18px", borderBottom:i<filtered.length-1?`1px solid ${t.border}`:"none" }}
+              onMouseEnter={ev=>ev.currentTarget.style.background=t.bgCardHover}
+              onMouseLeave={ev=>ev.currentTarget.style.background="transparent"}>
+              <div style={{ width:"32px", height:"32px", borderRadius:"9px", background:e.type==="income"?"rgba(16,185,129,0.12)":"rgba(239,68,68,0.12)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"15px", flexShrink:0 }}>
+                {e.type==="income"?"📈":"📉"}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
+                  <span style={{ color:t.text, fontSize:"13px", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.description}</span>
+                  {e.tag&&<span style={{ background:t.bgCardHover, color:t.textMuted, fontSize:"10px", fontWeight:600, padding:"1px 6px", borderRadius:"20px", flexShrink:0 }}>#{e.tag}</span>}
+                </div>
+                <div style={{ color:t.textFaint, fontSize:"11px" }}>{e.date}{e.note?` · ${e.note}`:""}</div>
+              </div>
+              <div style={{ color:e.type==="income"?"#10b981":"#ef4444", fontSize:"15px", fontWeight:700, flexShrink:0 }}>
+                {e.type==="income"?"+":"-"}${(e.amount||0).toFixed(2)}
+              </div>
+              <div style={{ display:"flex", gap:"4px", flexShrink:0 }}>
+                <button onClick={() => { setForm({...e}); setEditEntry(e); setShowForm(true); }} style={{ background:"none", border:"none", color:t.textFaint, cursor:"pointer", padding:"3px" }}
+                  onMouseEnter={ev=>ev.currentTarget.style.color="#7c3aed"} onMouseLeave={ev=>ev.currentTarget.style.color=t.textFaint}><Edit3 size={13}/></button>
+                <button onClick={() => setConfirmDel(e)} style={{ background:"none", border:"none", color:t.textFaint, cursor:"pointer", padding:"3px" }}
+                  onMouseEnter={ev=>ev.currentTarget.style.color="#ef4444"} onMouseLeave={ev=>ev.currentTarget.style.color=t.textFaint}><Trash2 size={13}/></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showForm && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>{setShowForm(false);setEditEntry(null);}}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+            <motion.div initial={{scale:0.93}} animate={{scale:1}} exit={{scale:0.93}} onClick={e=>e.stopPropagation()}
+              style={{background:t.bgSecondary||t.bgCard,border:`1px solid ${t.border}`,borderRadius:"20px",padding:"26px",width:"100%",maxWidth:"420px",boxShadow:"0 32px 80px rgba(0,0,0,0.6)"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
+                <h3 style={{color:t.text,fontSize:"16px",fontWeight:700}}>{editEntry?"✏️ Редактировать":form.type==="income"?"📈 Новый доход":"📉 Новый расход"}</h3>
+                <button onClick={()=>{setShowForm(false);setEditEntry(null);}} style={{background:"none",border:"none",color:t.textMuted,cursor:"pointer"}}><X size={18}/></button>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+                <div style={{display:"flex",gap:"8px"}}>
+                  {[{v:"income",l:"📈 Доход",c:"#10b981",bc:"rgba(16,185,129,0.2)"},{v:"expense",l:"📉 Расход",c:"#ef4444",bc:"rgba(239,68,68,0.2)"}].map(opt=>(
+                    <button key={opt.v} onClick={()=>setForm({...form,type:opt.v})}
+                      style={{flex:1,padding:"10px",borderRadius:"10px",border:`1px solid ${form.type===opt.v?opt.bc:t.border}`,background:form.type===opt.v?opt.bc:t.bgCardHover,color:form.type===opt.v?opt.c:t.textMuted,fontSize:"13px",fontWeight:form.type===opt.v?700:400,cursor:"pointer"}}>
+                      {opt.l}
+                    </button>
+                  ))}
+                </div>
+                <div><label style={{color:t.textMuted,fontSize:"11px",fontWeight:600,display:"block",marginBottom:"4px",textTransform:"uppercase"}}>Дата</label><input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} style={inputS}/></div>
+                <div><label style={{color:t.textMuted,fontSize:"11px",fontWeight:600,display:"block",marginBottom:"4px",textTransform:"uppercase"}}>Сумма ($) *</label>
+                  <input type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}
+                    style={{...inputS,fontSize:"18px",fontWeight:700,color:form.type==="income"?"#10b981":"#ef4444",borderColor:form.amount?(form.type==="income"?"rgba(16,185,129,0.4)":"rgba(239,68,68,0.4)"):t.border}}/></div>
+                <div><label style={{color:t.textMuted,fontSize:"11px",fontWeight:600,display:"block",marginBottom:"4px",textTransform:"uppercase"}}>Описание *</label><input placeholder="Зарплата, реклама, выручка..." value={form.description} onChange={e=>setForm({...form,description:e.target.value})} style={inputS}/></div>
+                <div><label style={{color:t.textMuted,fontSize:"11px",fontWeight:600,display:"block",marginBottom:"4px",textTransform:"uppercase"}}>Тег</label><input placeholder="зарплата, реклама, onlyfans..." value={form.tag} onChange={e=>setForm({...form,tag:e.target.value})} style={inputS}/></div>
+                <div><label style={{color:t.textMuted,fontSize:"11px",fontWeight:600,display:"block",marginBottom:"4px",textTransform:"uppercase"}}>Заметка</label><textarea placeholder="Дополнительно..." value={form.note} onChange={e=>setForm({...form,note:e.target.value})} rows={2} style={{...inputS,resize:"none"}}/></div>
+                <button onClick={save} disabled={saving||!form.amount||!form.description}
+                  style={{width:"100%",background:(!form.amount||!form.description)?"rgba(124,58,237,0.3)":form.type==="income"?"linear-gradient(135deg,#059669,#10b981)":"linear-gradient(135deg,#dc2626,#ef4444)",color:"#fff",border:"none",borderRadius:"12px",padding:"13px",fontSize:"14px",fontWeight:700,cursor:(!form.amount||!form.description)?"not-allowed":"pointer"}}>
+                  {saving?"Сохраняем...":editEntry?"Сохранить":form.type==="income"?"Добавить доход":"Добавить расход"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmDel && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>setConfirmDel(null)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+            <motion.div initial={{scale:0.93}} animate={{scale:1}} exit={{scale:0.93}} onClick={e=>e.stopPropagation()}
+              style={{background:t.bgSecondary||t.bgCard,border:"1px solid rgba(239,68,68,0.3)",borderRadius:"18px",padding:"24px",maxWidth:"360px",width:"100%",textAlign:"center"}}>
+              <div style={{fontSize:"30px",marginBottom:"10px"}}>🗑️</div>
+              <h3 style={{color:t.text,marginBottom:"8px"}}>Удалить запись?</h3>
+              <p style={{color:t.textMuted,fontSize:"13px",marginBottom:"20px"}}>{confirmDel.description} · ${confirmDel.amount}</p>
+              <div style={{display:"flex",gap:"10px"}}>
+                <button onClick={()=>del(confirmDel.id)} style={{flex:1,background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",color:"#ef4444",borderRadius:"10px",padding:"11px",fontWeight:600,cursor:"pointer"}}>Удалить</button>
+                <button onClick={()=>setConfirmDel(null)} style={{flex:1,background:t.bgCardHover,border:`1px solid ${t.border}`,color:t.textMuted,borderRadius:"10px",padding:"11px",cursor:"pointer"}}>Отмена</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
 // ── KPI TAB ───────────────────────────────────────────────────────────────────
 function KpiTab({ users, entries, tasks, grid, t }) {
   const [period, setPeriod] = useState(30);

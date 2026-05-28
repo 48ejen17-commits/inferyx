@@ -36,7 +36,7 @@ export default function Content() {
   const isDark = mode === "dark";
 
   const [models, setModels] = useState([]);
-  const [subreddits, setSubreddits] = useState([]); // все сабреддиты всех моделей
+  const [subreddits, setSubreddits] = useState([]);
   const [statuses, setStatuses] = useState({});
   const [activeModel, setActiveModel] = useState(null);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -47,6 +47,44 @@ export default function Content() {
   const [hoveredCell, setHoveredCell] = useState(null);
   const [newSub, setNewSub] = useState({ name: "", members: "", nsfw: true });
   const canManage = profile?.role !== ROLES.CHATTER;
+
+  // AI generator
+  const [aiModal, setAiModal] = useState(null); // { model, subreddit }
+  const [aiMood, setAiMood] = useState("");
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [copied, setCopied] = useState("");
+
+  const generatePost = async () => {
+    if (!aiModal) return;
+    setAiLoading(true);
+    setAiResult(null);
+    setAiError("");
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: aiModal.modelName,
+          subreddit: aiModal.subName,
+          mood: aiMood,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setAiResult(data);
+    } catch (e) {
+      setAiError(e.message || "Ошибка генерации");
+    }
+    setAiLoading(false);
+  };
+
+  const copyText = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(""), 2000);
+  };
 
   useEffect(() => {
     const unsubs = [
@@ -123,6 +161,27 @@ export default function Content() {
   const saveProblem = async () => {
     if (!problemModal) return;
     await saveCell(problemModal.key, problemModal.modelId, problemModal.subId, problemModal.dateStr, "problem", problemText);
+
+    // Send notification to owners/admins
+    try {
+      const sub = subreddits.find(s => s.id === problemModal.subId);
+      await addDoc(collection(db, "notifications"), {
+        type:      "problem",
+        title:     "⚠️ Проблема с сабреддитом",
+        body:      `${profile?.name || "Кто-то"} сообщил о проблеме: r/${sub?.name || "?"} — ${problemText || "без описания"}`,
+        modelId:   problemModal.modelId,
+        modelName: activeModel?.name || "—",
+        subName:   sub?.name || "—",
+        date:      problemModal.dateStr,
+        reportedBy: profile?.name || "—",
+        reportedByUid: user?.uid || "",
+        link:      "/content",
+        forRoles:  ["owner", "admin"],
+        read:      [],
+        createdAt: new Date().toISOString(),
+      });
+    } catch (e) { console.error(e); }
+
     setProblemModal(null); setProblemText("");
   };
 
@@ -284,6 +343,27 @@ export default function Content() {
                       </div>
                     </motion.div>
 
+                    {/* AI generate button on hover */}
+                    <AnimatePresence>
+                      {isHovered && cell.status === "none" && (
+                        <motion.button
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.8 }}
+                          transition={{ duration: 0.12 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAiModal({ modelName: activeModel.name, subName: sub.displayName });
+                            setAiResult(null);
+                            setAiMood("");
+                            setAiError("");
+                          }}
+                          style={{ position: "absolute", top: "4px", right: "4px", background: "linear-gradient(135deg, #7c3aed, #db2877)", border: "none", borderRadius: "6px", padding: "3px 5px", cursor: "pointer", fontSize: "11px", zIndex: 10 }}>
+                          ✨
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
+
                     {/* Tooltip */}
                     <AnimatePresence>
                       {isHovered && cell.status === "posted" && cell.updatedBy && (
@@ -372,6 +452,103 @@ export default function Content() {
                 <button onClick={confirmCancelPost} style={{ flex: 1, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>Да, отменить</button>
                 <button onClick={() => setConfirmCancel(null)} style={{ flex: 1, background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", color: "#10b981", borderRadius: "10px", padding: "11px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}>Нет, оставить ✅</button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AI Generator modal */}
+      <AnimatePresence>
+        {aiModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={() => setAiModal(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+            <motion.div initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary || t.bgCard, border: "1px solid rgba(124,58,237,0.3)", borderRadius: "20px", padding: "28px", width: "100%", maxWidth: "500px", boxShadow: "0 24px 60px rgba(0,0,0,0.5)" }}>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #7c3aed, #db2877)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>✨</div>
+                  <div>
+                    <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 700 }}>AI Копирайтер</h3>
+                    <p style={{ color: t.textMuted, fontSize: "12px" }}>r/{aiModal.subName} · {aiModal.modelName}</p>
+                  </div>
+                </div>
+                <button onClick={() => setAiModal(null)} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
+              </div>
+
+              <div style={{ marginTop: "20px", marginBottom: "16px" }}>
+                <label style={{ color: t.textMuted, fontSize: "12px", fontWeight: 600, display: "block", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Тема / настроение (необязательно)</label>
+                <input
+                  placeholder="например: утреннее, интригующее, после тренировки..."
+                  value={aiMood}
+                  onChange={e => setAiMood(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && !aiLoading && generatePost()}
+                  style={{ width: "100%", background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "14px", outline: "none", fontFamily: "inherit" }}
+                />
+              </div>
+
+              <button onClick={generatePost} disabled={aiLoading}
+                style={{ width: "100%", background: aiLoading ? "rgba(124,58,237,0.4)" : "linear-gradient(135deg, #7c3aed, #db2877)", color: "#fff", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 700, cursor: aiLoading ? "not-allowed" : "pointer", marginBottom: "16px" }}>
+                {aiLoading ? "⏳ Генерирую..." : "✨ Сгенерировать пост"}
+              </button>
+
+              {aiError && (
+                <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: "10px", padding: "12px", color: "#f87171", fontSize: "13px", marginBottom: "16px" }}>
+                  ❌ {aiError}
+                </div>
+              )}
+
+              {aiResult && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                  style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+
+                  {/* Title */}
+                  <div style={{ background: t.bgCardHover, border: `1px solid ${t.border}`, borderRadius: "12px", padding: "14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                      <span style={{ color: t.textMuted, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>Заголовок</span>
+                      <button onClick={() => copyText(aiResult.title, "title")}
+                        style={{ background: copied === "title" ? "rgba(16,185,129,0.15)" : "rgba(124,58,237,0.15)", border: "none", borderRadius: "6px", padding: "4px 10px", color: copied === "title" ? "#10b981" : "#a78bfa", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                        {copied === "title" ? "✓ Скопировано" : "Копировать"}
+                      </button>
+                    </div>
+                    <p style={{ color: t.text, fontSize: "14px", fontWeight: 600, lineHeight: "1.5", margin: 0 }}>{aiResult.title}</p>
+                  </div>
+
+                  {/* Body */}
+                  {aiResult.body && (
+                    <div style={{ background: t.bgCardHover, border: `1px solid ${t.border}`, borderRadius: "12px", padding: "14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <span style={{ color: t.textMuted, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>Текст</span>
+                        <button onClick={() => copyText(aiResult.body, "body")}
+                          style={{ background: copied === "body" ? "rgba(16,185,129,0.15)" : "rgba(124,58,237,0.15)", border: "none", borderRadius: "6px", padding: "4px 10px", color: copied === "body" ? "#10b981" : "#a78bfa", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+                          {copied === "body" ? "✓ Скопировано" : "Копировать"}
+                        </button>
+                      </div>
+                      <p style={{ color: t.textSecondary || t.textMuted, fontSize: "13px", lineHeight: "1.7", margin: 0 }}>{aiResult.body}</p>
+                    </div>
+                  )}
+
+                  {/* Tip */}
+                  {aiResult.tip && (
+                    <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: "10px", padding: "10px 14px" }}>
+                      <span style={{ color: "#f59e0b", fontSize: "12px" }}>💡 {aiResult.tip}</span>
+                    </div>
+                  )}
+
+                  {/* Copy all */}
+                  <button onClick={() => copyText(`${aiResult.title}\n\n${aiResult.body}`, "all")}
+                    style={{ background: copied === "all" ? "rgba(16,185,129,0.15)" : t.bgCardHover, border: `1px solid ${copied === "all" ? "rgba(16,185,129,0.3)" : t.border}`, color: copied === "all" ? "#10b981" : t.textMuted, borderRadius: "10px", padding: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                    {copied === "all" ? "✓ Всё скопировано!" : "📋 Скопировать всё"}
+                  </button>
+
+                  <button onClick={generatePost} disabled={aiLoading}
+                    style={{ background: "none", border: `1px solid rgba(124,58,237,0.3)`, color: "#a78bfa", borderRadius: "10px", padding: "10px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                    🔄 Сгенерировать другой вариант
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
           </motion.div>
         )}
