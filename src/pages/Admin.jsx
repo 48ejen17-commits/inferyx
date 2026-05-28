@@ -374,215 +374,454 @@ function LogsTab({ logs, users, entries, tasks, grid, t }) {
 }
 
 
-// ── CALCULATOR TAB ────────────────────────────────────────────────────────────
-function CalculatorTab({ users, entries, t }) {
-  const [mode, setMode] = useState("salary");
-  const [userRates, setUserRates] = useState({});
-  const [period, setPeriod] = useState("month");
-  const [globalType, setGlobalType] = useState("per_post");
-  const [globalValue, setGlobalValue] = useState("");
-  const [globalAvgRev, setGlobalAvgRev] = useState("");
-  const [views, setViews] = useState("");
-  const [clicks, setClicks] = useState("");
-  const [subs, setSubs] = useState("");
-  const [subPrice, setSubPrice] = useState("");
-  const [targetRevenue, setTargetRevenue] = useState("");
-  const [convRate, setConvRate] = useState("");
-  const [avgCheck, setAvgCheck] = useState("");
 
-  const days = { day: 1, week: 7, month: 30 }[period] || 30;
-  const getRate = (uid) => userRates[uid] || { type: globalType, value: "", avgRevenue: "", bonus: "", note: "" };
-  const setRate = (uid, field, val) => setUserRates(p => ({ ...p, [uid]: { ...getRate(uid), [field]: val } }));
+// ── INFO TOOLTIP ──────────────────────────────────────────────────────────────
+function InfoTip({ content, t }) {
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position:"relative", display:"inline-flex" }}>
+      <div
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        style={{ width:"16px", height:"16px", borderRadius:"50%", background:"rgba(124,58,237,0.2)", border:"1px solid rgba(124,58,237,0.4)", color:"#a78bfa", fontSize:"10px", fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", cursor:"help", flexShrink:0 }}>
+        i
+      </div>
+      <AnimatePresence>
+        {show && (
+          <motion.div initial={{ opacity:0, y:4, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, scale:0.95 }}
+            style={{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)", background:"linear-gradient(135deg,#1e1b4b,#2d1b4e)", border:"1px solid rgba(124,58,237,0.3)", borderRadius:"12px", padding:"10px 14px", width:"240px", zIndex:999, boxShadow:"0 8px 24px rgba(0,0,0,0.4)", pointerEvents:"none" }}>
+            <div style={{ color:"#e2e8f0", fontSize:"12px", lineHeight:"1.6" }}>{content}</div>
+            <div style={{ position:"absolute", bottom:"-5px", left:"50%", transform:"translateX(-50%)", width:"8px", height:"8px", background:"#2d1b4e", border:"1px solid rgba(124,58,237,0.3)", borderBottom:"none", borderRight:"none", transform:"translateX(-50%) rotate(225deg)" }}/>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── CALCULATOR TAB ────────────────────────────────────────────────────────────
+const CALC_MODES = [
+  { key:"salary",     label:"💰 Зарплаты",      desc:"Расчёт выплат сотрудникам" },
+  { key:"roi",        label:"📈 ROI",            desc:"Возврат инвестиций" },
+  { key:"conversion", label:"🎯 Конверсия",      desc:"Воронка и конверсия трафика" },
+  { key:"plan",       label:"📋 План",           desc:"Сколько нужно постов для цели" },
+  { key:"unit",       label:"⚖️ Unit Economics", desc:"Экономика одного подписчика" },
+  { key:"tax",        label:"🧾 Налоги",         desc:"Расчёт налогов и чистой прибыли" },
+];
+
+const INFO = {
+  salary: {
+    per_post: "Фиксированная сумма за каждый пост опубликованный чаттером. Простая и прозрачная схема.",
+    percent:  "Процент от выручки модели. Мотивирует чаттера работать на результат. Нужно указать среднюю выручку с поста.",
+    fixed:    "Фиксированная ставка за период (день/неделя/месяц) независимо от количества постов.",
+    bonus:    "Разовая доплата сверх основной ставки. Используй для премий, компенсаций или переработок.",
+  },
+  roi: {
+    invest:   "Сумма вложений: реклама, инструменты, зарплаты, прочие расходы за период.",
+    revenue:  "Общая выручка от агентства за тот же период.",
+    roi:      "ROI = (Выручка − Инвестиции) / Инвестиции × 100%. Показывает эффективность вложений. ROI > 0 = прибыльно.",
+  },
+  conversion: {
+    views:    "Просмотры постов на Reddit или другой платформе.",
+    clicks:   "Переходы по ссылке/в профиль. CTR = Клики / Просмотры × 100%.",
+    subs:     "Новые подписчики OF после перехода. Conversion Rate = Подписки / Клики × 100%.",
+    revenue:  "Выручка с новых подписчиков. RPM = Выручка / Просмотры × 1000 — стоимость 1000 просмотров.",
+  },
+  plan: {
+    target:   "Сколько хочешь заработать за период (месяц).",
+    avgCheck: "Средняя стоимость подписки или средний чек с одного подписчика.",
+    convRate: "Какой % переходов конвертируется в подписку. Обычно 3–15% для OF-трафика.",
+    posts:    "Среднее количество кликов с одного поста. Зависит от суба и качества контента (обычно 30–150).",
+  },
+  unit: {
+    cac:      "CAC (Customer Acquisition Cost) — стоимость привлечения одного подписчика. Расходы на трафик / Кол-во новых подписчиков.",
+    ltv:      "LTV (Lifetime Value) — сколько приносит один подписчик за всё время. Средний чек × Среднее кол-во месяцев подписки.",
+    margin:   "Маржа = (LTV − CAC) / LTV × 100%. Показывает прибыльность каждого привлечённого подписчика.",
+  },
+  tax: {
+    revenue:  "Общая выручка до вычета налогов и расходов.",
+    expenses: "Все расходы: зарплаты, реклама, инструменты, прочее.",
+    taxRate:  "Ставка налога в % (например, 6% для УСН доходы в РФ, или 20% НДС, или personal tax в других странах).",
+  },
+};
+
+function InfoBlock({ title, items, t }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ background:"rgba(124,58,237,0.06)", border:"1px solid rgba(124,58,237,0.15)", borderRadius:"12px", marginBottom:"16px", overflow:"hidden" }}>
+      <button onClick={() => setOpen(v=>!v)}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px", background:"none", border:"none", cursor:"pointer", textAlign:"left" }}>
+        <span style={{ fontSize:"14px" }}>📖</span>
+        <span style={{ color:"#a78bfa", fontSize:"13px", fontWeight:600, flex:1 }}>{title}</span>
+        <span style={{ color:"#a78bfa", fontSize:"12px" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div initial={{ height:0 }} animate={{ height:"auto" }} exit={{ height:0 }} style={{ overflow:"hidden" }}>
+            <div style={{ padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:"8px" }}>
+              {items.map((item, i) => (
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:"10px", padding:"8px 10px", background:"rgba(255,255,255,0.03)", borderRadius:"8px" }}>
+                  <span style={{ color:"#a78bfa", fontSize:"12px", fontWeight:700 }}>{item.term}</span>
+                  <span style={{ color:"rgba(255,255,255,0.55)", fontSize:"12px", lineHeight:"1.5" }}>{item.def}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function CalcResult({ label, value, color = "#10b981", size = "lg", info, t }) {
+  return (
+    <div style={{ background:"rgba(255,255,255,0.03)", border:`1px solid rgba(255,255,255,0.07)`, borderRadius:"12px", padding:"14px 16px" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
+        <span style={{ color:"rgba(255,255,255,0.4)", fontSize:"12px" }}>{label}</span>
+        {info && <InfoTip content={info} t={t} />}
+      </div>
+      <div style={{ color, fontSize: size === "lg" ? "26px" : "20px", fontWeight:800 }}>{value}</div>
+    </div>
+  );
+}
+
+function CalculatorTab({ users, entries, t }) {
+  const [mode, setMode]           = useState("salary");
+  const [showGuide, setShowGuide] = useState(false);
+
+  // ── SALARY ────────────────────────────────────────────────────────────────
+  const [period,      setPeriod]     = useState("month");
+  const [globalType,  setGlobalType] = useState("per_post");
+  const [globalValue, setGlobalVal]  = useState("");
+  const [globalRev,   setGlobalRev]  = useState("");
+  const [userRates,   setUserRates]  = useState({});
+
+  const days = { day:1, week:7, month:30 }[period] || 30;
+  const getRate = (uid) => userRates[uid] || { type:globalType, value:"", avgRevenue:"", bonus:"", note:"" };
+  const setRate = (uid, field, val) => setUserRates(p => ({ ...p, [uid]:{ ...getRate(uid), [field]:val } }));
 
   const applyGlobal = () => {
     const next = {};
-    users.forEach(u => { next[u.uid] = { ...getRate(u.uid), type: globalType, value: globalValue, avgRevenue: globalAvgRev }; });
+    users.forEach(u => { next[u.uid||u.id] = { ...getRate(u.uid||u.id), type:globalType, value:globalValue, avgRevenue:globalRev }; });
     setUserRates(next);
   };
 
   const calcUser = (u) => {
-    const r = getRate(u.uid);
-    const userEntries = entries.filter(e => e.userId === u.uid && (new Date() - new Date(e.createdAt)) / 86400000 <= days);
-    const posts = userEntries.length;
+    const r = getRate(u.uid||u.id);
+    const posts = entries.filter(e => e.userId === (u.uid||u.id) && (new Date()-new Date(e.createdAt))/86400000 <= days).length;
     let base = 0;
-    if (r.type === "per_post") base = posts * (parseFloat(r.value) || 0);
-    else if (r.type === "percent") base = posts * (parseFloat(r.avgRevenue) || 0) * ((parseFloat(r.value) || 0) / 100);
-    else if (r.type === "fixed") base = parseFloat(r.value) || 0;
-    const bonus = parseFloat(r.bonus) || 0;
-    return { posts, base, bonus, total: base + bonus };
+    if (r.type==="per_post") base = posts*(parseFloat(r.value)||0);
+    else if (r.type==="percent") base = posts*(parseFloat(r.avgRevenue)||0)*((parseFloat(r.value)||0)/100);
+    else if (r.type==="fixed") base = parseFloat(r.value)||0;
+    return { posts, base, bonus:parseFloat(r.bonus)||0, total:base+(parseFloat(r.bonus)||0) };
   };
+  const salaryResults  = users.map(u => ({ ...u, ...calcUser(u) })).sort((a,b)=>b.posts-a.posts);
+  const grandTotal     = salaryResults.reduce((s,u)=>s+u.total,0);
+  const totalBonus     = salaryResults.reduce((s,u)=>s+u.bonus,0);
 
-  const results = users.map(u => ({ ...u, ...calcUser(u) })).sort((a, b) => b.posts - a.posts);
-  const grandTotal = results.reduce((s, u) => s + u.total, 0);
+  // ── ROI ────────────────────────────────────────────────────────────────────
+  const [roiInvest,  setRoiInvest]  = useState("");
+  const [roiRev,     setRoiRev]     = useState("");
+  const roiVal    = roiInvest && roiRev ? ((parseFloat(roiRev)-parseFloat(roiInvest))/parseFloat(roiInvest)*100).toFixed(1) : null;
+  const roiProfit = roiInvest && roiRev ? (parseFloat(roiRev)-parseFloat(roiInvest)).toFixed(0) : null;
 
-  const ctr      = clicks && views     ? ((parseFloat(clicks) / parseFloat(views)) * 100).toFixed(1) : null;
-  const subRate  = subs && clicks      ? ((parseFloat(subs) / parseFloat(clicks)) * 100).toFixed(1) : null;
-  const revenue  = subs && subPrice    ? (parseFloat(subs) * parseFloat(subPrice)).toFixed(0) : null;
-  const roas     = revenue && views    ? (parseFloat(revenue) / parseFloat(views) * 1000).toFixed(2) : null;
-  const neededSubs   = targetRevenue && avgCheck ? Math.ceil(parseFloat(targetRevenue) / parseFloat(avgCheck)) : null;
-  const neededClicks = neededSubs && convRate    ? Math.ceil(neededSubs / (parseFloat(convRate) / 100)) : null;
-  const neededPosts  = neededClicks              ? Math.ceil(neededClicks / 50) : null;
+  // ── CONVERSION ─────────────────────────────────────────────────────────────
+  const [cvViews,  setCvViews]  = useState("");
+  const [cvClicks, setCvClicks] = useState("");
+  const [cvSubs,   setCvSubs]   = useState("");
+  const [cvPrice,  setCvPrice]  = useState("");
+  const ctr     = cvClicks&&cvViews   ? ((+cvClicks/+cvViews)*100).toFixed(2) : null;
+  const cr      = cvSubs&&cvClicks    ? ((+cvSubs/+cvClicks)*100).toFixed(2)  : null;
+  const cvRev   = cvSubs&&cvPrice     ? (+cvSubs * +cvPrice).toFixed(0)        : null;
+  const rpm     = cvRev&&cvViews      ? (+cvRev/+cvViews*1000).toFixed(2)      : null;
+  const cps     = cvClicks&&cvSubs    ? (+cvClicks/+cvSubs).toFixed(1)         : null;
 
-  const inputS  = { background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "13px", outline: "none", fontFamily: "inherit", width: "100%" };
-  const smInput = { ...inputS, padding: "7px 10px", fontSize: "12px" };
+  // ── PLAN ───────────────────────────────────────────────────────────────────
+  const [plTarget, setPlTarget]  = useState("");
+  const [plCheck,  setPlCheck]   = useState("");
+  const [plConv,   setPlConv]    = useState("");
+  const [plClkPst, setPlClkPst]  = useState("50");
+  const neededSubs   = plTarget&&plCheck  ? Math.ceil(+plTarget/+plCheck)                     : null;
+  const neededClicks = neededSubs&&plConv ? Math.ceil(neededSubs/(+plConv/100))                : null;
+  const neededPosts  = neededClicks&&plClkPst ? Math.ceil(neededClicks/+plClkPst)              : null;
+  const postsPerDay  = neededPosts         ? Math.ceil(neededPosts/30)                          : null;
+
+  // ── UNIT ECONOMICS ─────────────────────────────────────────────────────────
+  const [unitSpend,  setUnitSpend]  = useState("");
+  const [unitNewSub, setUnitNewSub] = useState("");
+  const [unitAvgChk, setUnitAvgChk] = useState("");
+  const [unitMonths, setUnitMonths] = useState("");
+  const cac     = unitSpend&&unitNewSub ? (+unitSpend/+unitNewSub).toFixed(2)            : null;
+  const ltv     = unitAvgChk&&unitMonths ? (+unitAvgChk*+unitMonths).toFixed(2)          : null;
+  const ltvCac  = ltv&&cac  ? (+ltv/+cac).toFixed(2)                                    : null;
+  const margin  = ltv&&cac  ? (((+ltv-+cac)/+ltv)*100).toFixed(1)                       : null;
+  const payback = cac&&unitAvgChk ? Math.ceil(+cac/+unitAvgChk)                         : null;
+
+  // ── TAX ────────────────────────────────────────────────────────────────────
+  const [taxRev,      setTaxRev]      = useState("");
+  const [taxExpenses, setTaxExpenses] = useState("");
+  const [taxRate,     setTaxRate]     = useState("6");
+  const [taxSalaries, setTaxSalaries] = useState("");
+  const grossProfit = taxRev&&taxExpenses ? (+taxRev-+taxExpenses).toFixed(0)              : null;
+  const taxAmount   = grossProfit&&taxRate ? (+grossProfit*(+taxRate/100)).toFixed(0)      : null;
+  const netProfit   = grossProfit&&taxAmount&&taxSalaries
+    ? (+grossProfit-+taxAmount-+taxSalaries).toFixed(0)
+    : grossProfit&&taxAmount
+    ? (+grossProfit-+taxAmount).toFixed(0) : null;
+  const effectiveMargin = taxRev&&netProfit ? ((+netProfit/+taxRev)*100).toFixed(1) : null;
+
+  const inputS = { background:t.bgInput, color:t.text, border:`1px solid ${t.border}`, borderRadius:"10px", padding:"10px 14px", fontSize:"13px", outline:"none", fontFamily:"inherit", width:"100%" };
+  const smInp  = { ...inputS, padding:"7px 10px", fontSize:"12px" };
+  const labelS = { color:t.textMuted, fontSize:"11px", fontWeight:600, display:"block", marginBottom:"5px", textTransform:"uppercase", letterSpacing:"0.4px" };
+
+  const fmt = (n, prefix="$") => n !== null ? `${prefix}${parseFloat(n).toLocaleString("ru-RU")}` : "—";
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
-        {[{ key: "salary", label: "💰 Зарплаты" }, { key: "conversion", label: "📊 Конверсия" }, { key: "plan", label: "🎯 Планирование" }].map(m => (
+    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }}>
+      {/* Mode tabs */}
+      <div style={{ display:"flex", gap:"6px", marginBottom:"20px", flexWrap:"wrap" }}>
+        {CALC_MODES.map(m => (
           <button key={m.key} onClick={() => setMode(m.key)}
-            style={{ padding: "9px 18px", borderRadius: "10px", border: `1px solid ${mode === m.key ? "#7c3aed" : t.border}`, background: mode === m.key ? "rgba(124,58,237,0.15)" : t.bgCard, color: mode === m.key ? "#a78bfa" : t.textMuted, fontSize: "13px", fontWeight: mode === m.key ? 700 : 500, cursor: "pointer" }}>
-            {m.label}
+            style={{ display:"flex", flexDirection:"column", padding:"10px 16px", borderRadius:"12px", border:`1px solid ${mode===m.key?"#7c3aed":t.border}`, background:mode===m.key?"rgba(124,58,237,0.15)":t.bgCard, color:mode===m.key?"#a78bfa":t.textMuted, fontSize:"13px", fontWeight:mode===m.key?700:400, cursor:"pointer", textAlign:"left" }}>
+            <span>{m.label}</span>
+            {!false && <span style={{ fontSize:"10px", opacity:0.6, marginTop:"2px" }}>{m.desc}</span>}
           </button>
         ))}
       </div>
 
+      {/* ── SALARY ── */}
       {mode === "salary" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Global settings bar */}
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "14px", padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-              <span style={{ color: t.textMuted, fontSize: "13px", fontWeight: 600 }}>Период:</span>
-              {[{ v: "day", l: "День" }, { v: "week", l: "Неделя" }, { v: "month", l: "Месяц" }].map(opt => (
-                <button key={opt.v} onClick={() => setPeriod(opt.v)}
-                  style={{ padding: "6px 14px", borderRadius: "8px", border: `1px solid ${period === opt.v ? "#7c3aed" : t.border}`, background: period === opt.v ? "rgba(124,58,237,0.15)" : t.bgCardHover, color: period === opt.v ? "#a78bfa" : t.textMuted, fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
-                  {opt.l}
-                </button>
-              ))}
-              <div style={{ width: "1px", height: "24px", background: t.border }} />
-              <span style={{ color: t.textMuted, fontSize: "13px" }}>Применить ко всем:</span>
-              <select value={globalType} onChange={e => setGlobalType(e.target.value)} style={{ ...smInput, width: "120px" }}>
-                <option value="per_post">$/пост</option>
-                <option value="percent">%</option>
-                <option value="fixed">Фикс.</option>
-              </select>
-              <input type="number" value={globalValue} onChange={e => setGlobalValue(e.target.value)}
-                placeholder={globalType === "per_post" ? "$/пост" : globalType === "percent" ? "%" : "$"}
-                style={{ ...smInput, width: "80px" }} />
-              {globalType === "percent" && (
-                <input type="number" value={globalAvgRev} onChange={e => setGlobalAvgRev(e.target.value)}
-                  placeholder="выручка/пост" style={{ ...smInput, width: "110px" }} />
+        <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+          <InfoBlock title="Как работает расчёт зарплат?" t={t} items={[
+            { term:"$/пост",    def:"Сотрудник получает фиксированную сумму за каждый опубликованный пост. Просто и прозрачно." },
+            { term:"% от выр.", def:"Процент от средней выручки с поста. Стимулирует работать на результат." },
+            { term:"Фикс.",     def:"Фиксированная сумма за период (день/неделя/месяц) независимо от количества постов." },
+            { term:"Бонус",     def:"Разовая доплата сверх основной ставки. Премия, компенсация или поощрение." },
+            { term:"Период",    def:"За какой период считать посты: день, неделя или месяц от текущей даты." },
+          ]}/>
+
+          {/* Global controls */}
+          <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"16px 18px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"12px" }}>
+              <span style={{ color:t.text, fontSize:"13px", fontWeight:600 }}>Применить ко всем сотрудникам</span>
+              <InfoTip content="Задаёт одинаковую схему оплаты всем. После применения можно изменить индивидуально в таблице ниже." t={t}/>
+            </div>
+            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", alignItems:"flex-end" }}>
+              <div>
+                <label style={labelS}>Период</label>
+                <div style={{ display:"flex", gap:"4px" }}>
+                  {[{v:"day",l:"День"},{v:"week",l:"Нед."},{v:"month",l:"Мес."}].map(o => (
+                    <button key={o.v} onClick={() => setPeriod(o.v)}
+                      style={{ padding:"7px 12px", borderRadius:"8px", border:`1px solid ${period===o.v?"#7c3aed":t.border}`, background:period===o.v?"rgba(124,58,237,0.15)":t.bgCardHover, color:period===o.v?"#a78bfa":t.textMuted, fontSize:"12px", fontWeight:600, cursor:"pointer" }}>
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={labelS}>Тип оплаты</label>
+                <select value={globalType} onChange={e=>setGlobalType(e.target.value)} style={{ ...smInp, width:"120px" }}>
+                  <option value="per_post">$/пост</option>
+                  <option value="percent">% от выр.</option>
+                  <option value="fixed">Фикс.</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelS}>{globalType==="per_post"?"$/пост":globalType==="percent"?"%":"Сумма $"}</label>
+                <input type="number" value={globalValue} onChange={e=>setGlobalVal(e.target.value)} placeholder="0" style={{ ...smInp, width:"80px" }}/>
+              </div>
+              {globalType==="percent" && (
+                <div>
+                  <label style={labelS}>Выручка/пост $</label>
+                  <input type="number" value={globalRev} onChange={e=>setGlobalRev(e.target.value)} placeholder="0" style={{ ...smInp, width:"110px" }}/>
+                </div>
               )}
               <button onClick={applyGlobal}
-                style={{ padding: "7px 16px", borderRadius: "8px", background: "rgba(124,58,237,0.15)", border: "1px solid rgba(124,58,237,0.3)", color: "#a78bfa", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
+                style={{ padding:"7px 16px", borderRadius:"8px", background:"rgba(124,58,237,0.15)", border:"1px solid rgba(124,58,237,0.3)", color:"#a78bfa", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
                 → Применить
               </button>
             </div>
           </div>
 
           {/* Per-user table */}
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", overflow: "hidden" }}>
-            <div style={{ padding: "13px 20px", borderBottom: `1px solid ${t.border}`, display: "grid", gridTemplateColumns: "2fr 60px 110px 80px 90px 80px 1fr 90px", gap: "8px", alignItems: "center" }}>
-              {["Сотрудник", "Постов", "Тип", "Ставка", "Выр./пост", "Бонус", "Заметка", "Итого"].map((h, i) => (
-                <div key={i} style={{ color: t.textFaint, fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px", textAlign: i === 7 ? "right" : "left" }}>{h}</div>
+          <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", overflow:"hidden" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"2fr 55px 100px 75px 80px 75px 1fr 80px", gap:"6px", padding:"10px 16px", borderBottom:`1px solid ${t.border}`, background:t.bgCardHover }}>
+              {["Сотрудник","Постов","Тип","Ставка","Выр./пост","Бонус","Заметка","Итого"].map((h,i) => (
+                <div key={i} style={{ color:t.textFaint, fontSize:"10px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.4px", textAlign:i===7?"right":"left" }}>{h}</div>
               ))}
             </div>
-            {results.map((u, i) => {
-              const r = getRate(u.uid);
-              const rc = ROLE_COLORS[u.role] || "#64748b";
+            {salaryResults.length === 0 ? (
+              <div style={{ padding:"32px", textAlign:"center", color:t.textFaint }}>Нет сотрудников</div>
+            ) : salaryResults.map((u,i) => {
+              const r  = getRate(u.uid||u.id);
+              const rc = ROLE_COLORS[u.role]||"#64748b";
               return (
-                <div key={u.id}
-                  style={{ padding: "11px 20px", borderBottom: i < results.length - 1 ? `1px solid ${t.border}` : "none", display: "grid", gridTemplateColumns: "2fr 60px 110px 80px 90px 80px 1fr 90px", gap: "8px", alignItems: "center" }}
-                  onMouseEnter={e => e.currentTarget.style.background = t.bgCardHover}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div style={{ width: "28px", height: "28px", borderRadius: "8px", background: `linear-gradient(135deg, ${rc}, ${rc}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: u.avatarEmoji ? "13px" : "11px", fontWeight: 700, color: "#fff", flexShrink: 0 }}>
-                      {u.avatarEmoji || (u.name || "?")[0].toUpperCase()}
+                <div key={u.id} style={{ display:"grid", gridTemplateColumns:"2fr 55px 100px 75px 80px 75px 1fr 80px", gap:"6px", padding:"10px 16px", borderBottom:i<salaryResults.length-1?`1px solid ${t.border}`:"none", alignItems:"center" }}
+                  onMouseEnter={e=>e.currentTarget.style.background=t.bgCardHover}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{ display:"flex", alignItems:"center", gap:"7px" }}>
+                    <div style={{ width:"26px", height:"26px", borderRadius:"7px", background:`linear-gradient(135deg,${rc},${rc}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:u.avatarEmoji?"12px":"10px", fontWeight:700, color:"#fff", flexShrink:0 }}>
+                      {u.avatarEmoji||(u.name||"?")[0].toUpperCase()}
                     </div>
-                    <div>
-                      <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{u.name}</div>
-                      <div style={{ color: t.textFaint, fontSize: "10px" }}>{ROLE_LABELS[u.role] || u.role}</div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ color:t.text, fontSize:"12px", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.name}</div>
+                      <div style={{ color:t.textFaint, fontSize:"10px" }}>{ROLE_LABELS[u.role]||u.role}</div>
                     </div>
                   </div>
-                  <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{u.posts}</div>
-                  <select value={r.type} onChange={e => setRate(u.uid, "type", e.target.value)} style={{ ...smInput }}>
+                  <div style={{ color:t.text, fontSize:"13px", fontWeight:700 }}>{u.posts}</div>
+                  <select value={r.type} onChange={e=>setRate(u.uid||u.id,"type",e.target.value)} style={smInp}>
                     <option value="per_post">$/пост</option>
                     <option value="percent">%</option>
                     <option value="fixed">Фикс.</option>
                   </select>
-                  <input type="number" value={r.value} onChange={e => setRate(u.uid, "value", e.target.value)} placeholder="0" style={{ ...smInput }} />
-                  {r.type === "percent"
-                    ? <input type="number" value={r.avgRevenue} onChange={e => setRate(u.uid, "avgRevenue", e.target.value)} placeholder="$" style={{ ...smInput }} />
-                    : <div style={{ color: t.textFaint, fontSize: "12px", paddingLeft: "4px" }}>—</div>}
-                  <input type="number" value={r.bonus} onChange={e => setRate(u.uid, "bonus", e.target.value)}
-                    placeholder="0" style={{ ...smInput, borderColor: r.bonus ? "rgba(16,185,129,0.4)" : t.border }} />
-                  <input value={r.note} onChange={e => setRate(u.uid, "note", e.target.value)}
-                    placeholder="заметка..." style={{ ...smInput }} />
-                  <div style={{ textAlign: "right" }}>
-                    <div style={{ color: u.total > 0 ? "#10b981" : t.textFaint, fontSize: "14px", fontWeight: 700 }}>
-                      {u.total > 0 ? `$${u.total.toFixed(0)}` : "—"}
+                  <input type="number" value={r.value} onChange={e=>setRate(u.uid||u.id,"value",e.target.value)} placeholder="0" style={smInp}/>
+                  {r.type==="percent"
+                    ? <input type="number" value={r.avgRevenue} onChange={e=>setRate(u.uid||u.id,"avgRevenue",e.target.value)} placeholder="$" style={smInp}/>
+                    : <div style={{ color:t.textFaint, fontSize:"12px" }}>—</div>}
+                  <input type="number" value={r.bonus} onChange={e=>setRate(u.uid||u.id,"bonus",e.target.value)} placeholder="0"
+                    style={{ ...smInp, borderColor:r.bonus?"rgba(16,185,129,0.4)":t.border }}/>
+                  <input value={r.note} onChange={e=>setRate(u.uid||u.id,"note",e.target.value)} placeholder="заметка..." style={smInp}/>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ color:u.total>0?"#10b981":t.textFaint, fontSize:"14px", fontWeight:700 }}>
+                      {u.total>0?`$${u.total.toFixed(0)}`:"—"}
                     </div>
-                    {u.bonus > 0 && <div style={{ color: "#f59e0b", fontSize: "10px" }}>+${u.bonus.toFixed(0)} бонус</div>}
+                    {u.bonus>0&&<div style={{ color:"#f59e0b", fontSize:"10px" }}>+${u.bonus.toFixed(0)}</div>}
                   </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Total */}
-          <div style={{ padding: "18px 22px", background: "rgba(16,185,129,0.07)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: "14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ color: t.text, fontSize: "15px", fontWeight: 700 }}>💰 Итого к выплате</div>
-              <div style={{ color: t.textFaint, fontSize: "12px", marginTop: "3px" }}>
-                {results.filter(u => u.total > 0).length} сотрудников · {period === "day" ? "день" : period === "week" ? "неделя" : "месяц"}
-              </div>
-            </div>
-            <div style={{ color: "#10b981", fontSize: "26px", fontWeight: 800 }}>${grandTotal.toFixed(0)}</div>
+          {/* Summary */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"10px" }}>
+            <CalcResult label="Итого к выплате" value={fmt(grandTotal)} color="#10b981" t={t}
+              info="Сумма всех индивидуальных выплат включая бонусы."/>
+            <CalcResult label="Из них бонусы" value={fmt(totalBonus)} color="#f59e0b" size="md" t={t}
+              info="Сумма всех бонусов и доплат."/>
+            <CalcResult label="Сотрудников" value={`${salaryResults.filter(u=>u.total>0).length} из ${salaryResults.length}`} color="#a78bfa" size="md" t={t}
+              info="Количество сотрудников с ненулевой выплатой."/>
           </div>
         </div>
       )}
 
-      {mode === "conversion" && (
-        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "18px" }}>
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "18px" }}>Данные воронки</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {[
-                { label: "👁 Просмотры", v: views, set: setViews, ph: "10000" },
-                { label: "🖱 Клики", v: clicks, set: setClicks, ph: "500" },
-                { label: "🔔 Подписчики", v: subs, set: setSubs, ph: "50" },
-                { label: "💵 Цена подписки ($)", v: subPrice, set: setSubPrice, ph: "9.99" },
-              ].map(f => (
-                <div key={f.label}>
-                  <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "5px", fontWeight: 600 }}>{f.label}</label>
-                  <input type="number" value={f.v} onChange={e => f.set(e.target.value)} placeholder={f.ph} style={inputS} />
+      {/* ── ROI ── */}
+      {mode === "roi" && (
+        <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <InfoBlock title="Что такое ROI?" t={t} items={[
+              { term:"ROI",        def:"Return on Investment — возврат инвестиций. Показывает насколько эффективны вложения." },
+              { term:"ROI > 100%", def:"Каждый вложенный доллар принёс больше доллара прибыли. Бизнес прибыльный." },
+              { term:"ROI = 0%",   def:"Вышли в ноль — выручка равна расходам." },
+              { term:"ROI < 0%",   def:"Убыток — расходы больше выручки." },
+            ]}/>
+            {[
+              { label:"💸 Инвестиции ($)", val:roiInvest, set:setRoiInvest, ph:"10000", info:INFO.roi.invest },
+              { label:"💰 Выручка ($)",    val:roiRev,    set:setRoiRev,    ph:"25000", info:INFO.roi.revenue },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                  <label style={{ ...labelS, marginBottom:0 }}>{f.label}</label>
+                  <InfoTip content={f.info} t={t}/>
                 </div>
-              ))}
-            </div>
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={inputS}/>
+              </div>
+            ))}
           </div>
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "20px" }}>Результаты</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              {[
-                { label: "CTR", value: ctr ? `${ctr}%` : "—", color: "#0ea5e9", icon: "👆", good: ctr > 3 },
-                { label: "Конверсия в подписку", value: subRate ? `${subRate}%` : "—", color: "#7c3aed", icon: "🔔", good: subRate > 5 },
-                { label: "Выручка", value: revenue ? `$${revenue}` : "—", color: "#10b981", icon: "💰", good: true },
-                { label: "RPM (на 1000 просм.)", value: roas ? `$${roas}` : "—", color: "#f59e0b", icon: "📈", good: roas > 1 },
-              ].map((m, i) => (
-                <div key={i} style={{ background: t.bgCardHover, borderRadius: "12px", padding: "16px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "20px" }}>{m.icon}</span>
-                    {m.value !== "—" && <span style={{ background: m.good ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: m.good ? "#10b981" : "#ef4444", fontSize: "10px", fontWeight: 700, padding: "2px 6px", borderRadius: "6px" }}>{m.good ? "✓ OK" : "↑ Рост"}</span>}
-                  </div>
-                  <div style={{ color: m.color, fontSize: "24px", fontWeight: 700, marginBottom: "4px" }}>{m.value}</div>
-                  <div style={{ color: t.textFaint, fontSize: "11px" }}>{m.label}</div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            {roiVal !== null ? (
+              <>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+                  <CalcResult label="ROI" value={`${roiVal}%`}
+                    color={+roiVal>100?"#10b981":+roiVal>0?"#f59e0b":"#ef4444"} t={t}
+                    info={INFO.roi.roi}/>
+                  <CalcResult label="Чистая прибыль" value={fmt(roiProfit)}
+                    color={+roiProfit>0?"#10b981":"#ef4444"} size="md" t={t}
+                    info="Выручка минус инвестиции."/>
                 </div>
-              ))}
+
+                {/* Visual gauge */}
+                <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"20px" }}>
+                  <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"10px" }}>Оценка эффективности</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                    {[
+                      { label:"Убыток",         range:[-Infinity,0],    color:"#ef4444" },
+                      { label:"Слабая",          range:[0,50],           color:"#f97316" },
+                      { label:"Нормальная",      range:[50,150],         color:"#f59e0b" },
+                      { label:"Хорошая",         range:[150,300],        color:"#10b981" },
+                      { label:"Отличная",        range:[300,Infinity],   color:"#7c3aed" },
+                    ].map((band, i) => {
+                      const active = +roiVal >= band.range[0] && +roiVal < band.range[1];
+                      return (
+                        <div key={i} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"8px 12px", borderRadius:"8px", background:active?`${band.color}18`:"transparent", border:`1px solid ${active?band.color+"40":"transparent"}` }}>
+                          <div style={{ width:"10px", height:"10px", borderRadius:"50%", background:band.color, flexShrink:0 }}/>
+                          <span style={{ color:active?band.color:t.textMuted, fontSize:"13px", fontWeight:active?700:400 }}>{band.label}</span>
+                          {active && <span style={{ color:band.color, fontSize:"12px", marginLeft:"auto" }}>← вы здесь</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"40px", textAlign:"center", color:t.textFaint }}>Заполни поля слева</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── CONVERSION ── */}
+      {mode === "conversion" && (
+        <div style={{ display:"grid", gridTemplateColumns:"300px 1fr", gap:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <InfoBlock title="Воронка конверсии" t={t} items={[
+              { term:"CTR",   def:"Click-Through Rate — % переходов от просмотров. Норма для OF-трафика: 2–8%." },
+              { term:"CR",    def:"Conversion Rate — % подписок от кликов. Норма: 3–15%." },
+              { term:"RPM",   def:"Revenue Per Mille — выручка с 1000 просмотров. Ключевая метрика эффективности поста." },
+              { term:"CPS",   def:"Cost Per Subscriber — сколько кликов нужно для одной подписки." },
+            ]}/>
+            {[
+              { label:"👁 Просмотры",        val:cvViews,  set:setCvViews,  ph:"10000", info:INFO.conversion.views },
+              { label:"🖱 Клики",            val:cvClicks, set:setCvClicks, ph:"300",   info:INFO.conversion.clicks },
+              { label:"🔔 Новых подписок",   val:cvSubs,   set:setCvSubs,   ph:"30",    info:INFO.conversion.subs },
+              { label:"💵 Цена подписки ($)",val:cvPrice,  set:setCvPrice,  ph:"9.99",  info:"Средняя стоимость подписки на OF или другой платформе." },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                  <label style={{ ...labelS, marginBottom:0 }}>{f.label}</label>
+                  <InfoTip content={f.info} t={t}/>
+                </div>
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={inputS}/>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+              <CalcResult label="CTR" value={ctr?`${ctr}%`:"—"} color={ctr&&+ctr>3?"#10b981":ctr?"#f59e0b":"#64748b"} t={t} info="% переходов от просмотров. > 3% — хороший результат."/>
+              <CalcResult label="CR (в подписку)" value={cr?`${cr}%`:"—"} color={cr&&+cr>5?"#10b981":cr?"#f59e0b":"#64748b"} t={t} info="% подписок от кликов. > 5% — хороший результат."/>
+              <CalcResult label="Выручка" value={cvRev?fmt(cvRev):"—"} color="#a78bfa" t={t} info="Общая выручка с новых подписчиков."/>
+              <CalcResult label="RPM" value={rpm?`$${rpm}`:"—"} color={rpm&&+rpm>1?"#10b981":rpm?"#f59e0b":"#64748b"} t={t} info={INFO.conversion.revenue}/>
             </div>
-            {views && (
-              <div style={{ marginTop: "20px" }}>
-                <div style={{ color: t.textMuted, fontSize: "11px", fontWeight: 700, marginBottom: "10px", textTransform: "uppercase" }}>Воронка</div>
-                {[{ label: "Просмотры", val: parseFloat(views)||0, color: "#0ea5e9" }, { label: "Клики", val: parseFloat(clicks)||0, color: "#7c3aed" }, { label: "Подписки", val: parseFloat(subs)||0, color: "#10b981" }].map((step, i) => {
-                  const pct = Math.round((step.val / (parseFloat(views)||1)) * 100);
+            {/* Funnel visual */}
+            {cvViews && (
+              <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"18px" }}>
+                <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"12px" }}>Воронка</div>
+                {[
+                  { label:"Просмотры",  val:+cvViews||0,  color:"#0ea5e9" },
+                  { label:"Клики",      val:+cvClicks||0, color:"#7c3aed" },
+                  { label:"Подписки",   val:+cvSubs||0,   color:"#10b981" },
+                ].map((step, i) => {
+                  const pct = Math.round((step.val/(+cvViews||1))*100);
                   return (
-                    <div key={i} style={{ marginBottom: "8px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                        <span style={{ color: t.textMuted, fontSize: "12px" }}>{step.label}</span>
-                        <span style={{ color: t.text, fontSize: "12px", fontWeight: 600 }}>{step.val.toLocaleString()} ({pct}%)</span>
+                    <div key={i} style={{ marginBottom:"8px" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"3px" }}>
+                        <span style={{ color:t.textMuted, fontSize:"12px" }}>{step.label}</span>
+                        <span style={{ color:t.text, fontSize:"12px", fontWeight:600 }}>{step.val.toLocaleString()} ({pct}%)</span>
                       </div>
-                      <div style={{ height: "8px", background: t.border, borderRadius: "4px", overflow: "hidden" }}>
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.7, delay: i * 0.1 }}
-                          style={{ height: "100%", background: step.color, borderRadius: "4px" }} />
+                      <div style={{ height:"8px", background:t.border, borderRadius:"4px", overflow:"hidden" }}>
+                        <motion.div initial={{ width:0 }} animate={{ width:`${pct}%` }} transition={{ duration:0.6, delay:i*0.1 }}
+                          style={{ height:"100%", background:step.color, borderRadius:"4px" }}/>
                       </div>
                     </div>
                   );
@@ -593,392 +832,218 @@ function CalculatorTab({ users, entries, t }) {
         </div>
       )}
 
+      {/* ── PLAN ── */}
       {mode === "plan" && (
-        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "18px" }}>
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "18px" }}>Цель</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {[
-                { label: "🎯 Цель по выручке ($)", v: targetRevenue, set: setTargetRevenue, ph: "5000" },
-                { label: "💵 Средний чек ($)", v: avgCheck, set: setAvgCheck, ph: "15" },
-                { label: "📊 Конверсия клик→подписка (%)", v: convRate, set: setConvRate, ph: "8" },
-              ].map(f => (
-                <div key={f.label}>
-                  <label style={{ color: t.textMuted, fontSize: "12px", display: "block", marginBottom: "5px", fontWeight: 600 }}>{f.label}</label>
-                  <input type="number" value={f.v} onChange={e => f.set(e.target.value)} placeholder={f.ph} style={inputS} />
+        <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <InfoBlock title="Как считается план?" t={t} items={[
+              { term:"Логика",       def:"Цель → нужно подписок → нужно кликов → нужно постов → постов в день." },
+              { term:"Avg Check",    def:"Средняя выручка с одного нового подписчика." },
+              { term:"Conv. Rate",   def:"Какой % кликов превращается в подписку. Обычно 5–15% для OF." },
+              { term:"Клики/пост",   def:"Среднее количество кликов с одного поста. Зависит от суба: 30–200." },
+            ]}/>
+            {[
+              { label:"🎯 Цель ($)",          val:plTarget,  set:setPlTarget,  ph:"5000",  info:INFO.plan.target },
+              { label:"💵 Средний чек ($)",    val:plCheck,   set:setPlCheck,   ph:"15",    info:INFO.plan.avgCheck },
+              { label:"📊 Конверсия (%)",      val:plConv,    set:setPlConv,    ph:"8",     info:INFO.plan.convRate },
+              { label:"🖱 Кликов с поста",     val:plClkPst,  set:setPlClkPst,  ph:"50",    info:INFO.plan.posts },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                  <label style={{ ...labelS, marginBottom:0 }}>{f.label}</label>
+                  <InfoTip content={f.info} t={t}/>
                 </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600, marginBottom: "20px" }}>Что нужно сделать</h3>
-            {neededSubs ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                {[
-                  { icon: "💰", label: "Нужно выручки", value: `$${parseFloat(targetRevenue).toLocaleString()}`, color: "#10b981" },
-                  { icon: "🔔", label: "Нужно подписчиков", value: neededSubs.toLocaleString(), color: "#7c3aed" },
-                  { icon: "🖱", label: "Нужно кликов", value: neededClicks ? neededClicks.toLocaleString() : "—", color: "#0ea5e9" },
-                  { icon: "📝", label: "Нужно постов (прибл.)", value: neededPosts ? neededPosts.toLocaleString() : "—", color: "#f59e0b" },
-                  { icon: "📅", label: "Постов в день (30 дней)", value: neededPosts ? Math.ceil(neededPosts / 30) : "—", color: "#8b5cf6" },
-                ].map((item, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "13px 16px", background: t.bgCardHover, borderRadius: "10px" }}>
-                    <span style={{ fontSize: "20px" }}>{item.icon}</span>
-                    <div style={{ flex: 1, color: t.textMuted, fontSize: "13px" }}>{item.label}</div>
-                    <div style={{ color: item.color, fontSize: "18px", fontWeight: 700 }}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ color: t.textFaint, textAlign: "center", padding: "40px", fontSize: "14px" }}>Заполни поля слева</div>
-            )}
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-// ── FINANCE TAB ───────────────────────────────────────────────────────────────
-function FinanceTab({ db, t }) {
-  const [entries, setEntries] = useState([]);
-  const [showForm, setShowForm] = useState(false);
-  const [editEntry, setEditEntry] = useState(null);
-  const [filterPeriod, setFilterPeriod] = useState(30);
-  const [saving, setSaving] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(null);
-
-  const emptyForm = {
-    date: new Date().toISOString().split("T")[0],
-    type: "income",       // income | expense
-    amount: "",
-    description: "",
-    tag: "",              // free-form tag
-    note: "",
-  };
-  const [form, setForm] = useState(emptyForm);
-
-  useEffect(() => {
-    return onSnapshot(
-      query(collection(db, "finance_entries"), orderBy("date", "desc")),
-      snap => setEntries(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-  }, [db]);
-
-  const save = async () => {
-    if (!form.amount || !form.description) return;
-    setSaving(true);
-    try {
-      const data = {
-        ...form,
-        amount: parseFloat(form.amount) || 0,
-        updatedAt: new Date().toISOString(),
-      };
-      if (editEntry) {
-        const { id, ...rest } = data;
-        await import("firebase/firestore").then(m =>
-          m.updateDoc(m.doc(db, "finance_entries", editEntry.id), rest)
-        );
-      } else {
-        await addDoc(collection(db, "finance_entries"), { ...data, createdAt: new Date().toISOString() });
-      }
-      setForm(emptyForm);
-      setShowForm(false);
-      setEditEntry(null);
-    } catch (e) { console.error(e); }
-    setSaving(false);
-  };
-
-  const del = async (id) => {
-    await import("firebase/firestore").then(m => m.deleteDoc(m.doc(db, "finance_entries", id)));
-    setConfirmDel(null);
-  };
-
-  const startEdit = (e) => {
-    setForm({ ...e });
-    setEditEntry(e);
-    setShowForm(true);
-  };
-
-  // Filter by period
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - filterPeriod);
-  const filtered = entries.filter(e => !e.date || new Date(e.date) >= cutoff);
-
-  const income   = filtered.filter(e => e.type === "income");
-  const expense  = filtered.filter(e => e.type === "expense");
-  const totalIn  = income.reduce((s, e) => s + (e.amount || 0), 0);
-  const totalOut = expense.reduce((s, e) => s + (e.amount || 0), 0);
-  const profit   = totalIn - totalOut;
-
-  // By tag
-  const byTag = Object.entries(
-    filtered.reduce((acc, e) => {
-      const k = e.tag || "Без тега";
-      if (!acc[k]) acc[k] = { income: 0, expense: 0 };
-      if (e.type === "income") acc[k].income += e.amount || 0;
-      else acc[k].expense += e.amount || 0;
-      return acc;
-    }, {})
-  ).sort((a, b) => (b[1].income + b[1].expense) - (a[1].income + a[1].expense));
-
-  // By date last 30 days
-  const last30 = Array.from({ length: Math.min(filterPeriod, 30) }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (Math.min(filterPeriod, 30) - 1 - i));
-    return d.toISOString().split("T")[0];
-  });
-  const byDate = last30.map(date => ({
-    date,
-    label: new Date(date).getDate(),
-    income:  filtered.filter(e => e.date === date && e.type === "income").reduce((s, e) => s + e.amount, 0),
-    expense: filtered.filter(e => e.date === date && e.type === "expense").reduce((s, e) => s + e.amount, 0),
-  }));
-  const maxBar = Math.max(...byDate.map(d => Math.max(d.income, d.expense)), 1);
-
-  const inputS = { background: t.bgInput, color: t.text, border: `1px solid ${t.border}`, borderRadius: "10px", padding: "10px 14px", fontSize: "13px", outline: "none", fontFamily: "inherit", width: "100%" };
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-
-      {/* Controls */}
-      <div style={{ display: "flex", gap: "10px", marginBottom: "20px", flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: "6px" }}>
-          {[7, 14, 30, 90, 365].map(d => (
-            <button key={d} onClick={() => setFilterPeriod(d)}
-              style={{ padding: "7px 14px", borderRadius: "8px", border: `1px solid ${filterPeriod === d ? "#7c3aed" : t.border}`, background: filterPeriod === d ? "rgba(124,58,237,0.15)" : t.bgCard, color: filterPeriod === d ? "#a78bfa" : t.textMuted, fontSize: "13px", fontWeight: filterPeriod === d ? 700 : 400, cursor: "pointer" }}>
-              {d === 365 ? "Год" : `${d}д`}
-            </button>
-          ))}
-        </div>
-        <div style={{ flex: 1 }} />
-        <button onClick={() => { setForm({ ...emptyForm, type: "expense" }); setEditEntry(null); setShowForm(true); }}
-          style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", borderRadius: "10px", padding: "9px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
-          <Minus size={14} />Расход
-        </button>
-        <button onClick={() => { setForm({ ...emptyForm, type: "income" }); setEditEntry(null); setShowForm(true); }}
-          style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.25)", color: "#10b981", borderRadius: "10px", padding: "9px 16px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>
-          <Plus size={14} />Доход
-        </button>
-      </div>
-
-      {/* Summary cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "14px", marginBottom: "20px" }}>
-        {[
-          { label: "Доходы", value: `$${totalIn.toLocaleString("ru-RU", { minimumFractionDigits: 0 })}`, color: "#10b981", bg: "rgba(16,185,129,0.08)", border: "rgba(16,185,129,0.2)", icon: "📈", count: income.length },
-          { label: "Расходы", value: `$${totalOut.toLocaleString("ru-RU", { minimumFractionDigits: 0 })}`, color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.2)", icon: "📉", count: expense.length },
-          { label: "Прибыль", value: `${profit >= 0 ? "+" : ""}$${profit.toLocaleString("ru-RU", { minimumFractionDigits: 0 })}`, color: profit >= 0 ? "#10b981" : "#ef4444", bg: profit >= 0 ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)", border: profit >= 0 ? "rgba(16,185,129,0.2)" : "rgba(239,68,68,0.2)", icon: profit >= 0 ? "✅" : "⚠️", count: filtered.length },
-        ].map((s, i) => (
-          <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: "16px", padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <div style={{ color: t.textMuted, fontSize: "12px", marginBottom: "6px" }}>{s.label}</div>
-                <div style={{ color: s.color, fontSize: "26px", fontWeight: 800, lineHeight: 1 }}>{s.value}</div>
-                <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "5px" }}>{s.count} операций</div>
-              </div>
-              <span style={{ fontSize: "24px" }}>{s.icon}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: "16px", marginBottom: "16px" }}>
-        {/* Bar chart */}
-        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px" }}>
-          <h3 style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "16px" }}>
-            Доходы / Расходы по дням
-            <span style={{ marginLeft: "12px", color: t.textFaint, fontSize: "11px", fontWeight: 400 }}>
-              <span style={{ color: "#10b981" }}>■</span> доходы &nbsp;
-              <span style={{ color: "#ef4444" }}>■</span> расходы
-            </span>
-          </h3>
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "3px", height: "90px" }}>
-            {byDate.map((d, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "2px", height: "100%" }}>
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: "1px", width: "100%" }}>
-                  {d.income > 0 && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: `${Math.round((d.income / maxBar) * 100) * 0.9}%` }}
-                      transition={{ duration: 0.4, delay: i * 0.01 }}
-                      style={{ background: "#10b981", borderRadius: "2px 2px 0 0", minHeight: "3px" }}
-                      title={`Доход: $${d.income}`} />
-                  )}
-                  {d.expense > 0 && (
-                    <motion.div initial={{ height: 0 }} animate={{ height: `${Math.round((d.expense / maxBar) * 100) * 0.9}%` }}
-                      transition={{ duration: 0.4, delay: i * 0.01 }}
-                      style={{ background: "#ef4444", borderRadius: "2px 2px 0 0", minHeight: "3px" }}
-                      title={`Расход: $${d.expense}`} />
-                  )}
-                  {d.income === 0 && d.expense === 0 && (
-                    <div style={{ height: "3px", background: t.border, borderRadius: "2px" }} />
-                  )}
-                </div>
-                {i % 5 === 0 && <div style={{ color: t.textFaint, fontSize: "9px" }}>{d.label}</div>}
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={inputS}/>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* By tag */}
-        <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px" }}>
-          <h3 style={{ color: t.text, fontSize: "14px", fontWeight: 600, marginBottom: "14px" }}>По тегам</h3>
-          {byTag.length === 0 ? (
-            <div style={{ color: t.textFaint, fontSize: "13px", textAlign: "center", padding: "20px" }}>Нет данных</div>
-          ) : byTag.slice(0, 7).map(([tag, data], i) => (
-            <div key={tag} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: i < byTag.slice(0, 7).length - 1 ? `1px solid ${t.border}` : "none" }}>
-              <span style={{ color: t.textMuted, fontSize: "12px" }}>#{tag}</span>
-              <div style={{ display: "flex", gap: "10px" }}>
-                {data.income > 0 && <span style={{ color: "#10b981", fontSize: "12px", fontWeight: 600 }}>+${data.income.toFixed(0)}</span>}
-                {data.expense > 0 && <span style={{ color: "#ef4444", fontSize: "12px", fontWeight: 600 }}>-${data.expense.toFixed(0)}</span>}
+          {neededSubs ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
+              {[
+                { icon:"💰", label:"Нужно выручки",      val:`$${(+plTarget).toLocaleString()}`,   color:"#10b981" },
+                { icon:"🔔", label:"Нужно подписчиков",   val:neededSubs.toLocaleString(),          color:"#7c3aed" },
+                { icon:"🖱", label:"Нужно кликов",        val:neededClicks?.toLocaleString()||"—",  color:"#0ea5e9" },
+                { icon:"📝", label:"Нужно постов (всего)",val:neededPosts?.toLocaleString()||"—",   color:"#f59e0b" },
+                { icon:"📅", label:"Постов в день (30д)", val:postsPerDay?.toLocaleString()||"—",   color:"#db2877" },
+              ].map((item, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:"12px", padding:"14px 18px", background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"12px" }}>
+                  <span style={{ fontSize:"22px" }}>{item.icon}</span>
+                  <div style={{ flex:1, color:t.textMuted, fontSize:"13px" }}>{item.label}</div>
+                  <div style={{ color:item.color, fontSize:"20px", fontWeight:800 }}>{item.val}</div>
+                </div>
+              ))}
+              {neededPosts && (
+                <div style={{ padding:"12px 16px", background:"rgba(124,58,237,0.07)", border:"1px solid rgba(124,58,237,0.15)", borderRadius:"12px" }}>
+                  <div style={{ color:"#a78bfa", fontSize:"12px", lineHeight:"1.6" }}>
+                    💡 При {plClkPst} кликах с поста и {plConv}% конверсии нужно публиковать <strong>{postsPerDay} постов/день</strong> чтобы заработать ${(+plTarget).toLocaleString()} за месяц.
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"40px", textAlign:"center", color:t.textFaint }}>Заполни поля слева</div>
+          )}
+        </div>
+      )}
+
+      {/* ── UNIT ECONOMICS ── */}
+      {mode === "unit" && (
+        <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <InfoBlock title="Unit Economics — что это?" t={t} items={[
+              { term:"CAC",       def:"Customer Acquisition Cost — стоимость привлечения одного подписчика. Расходы / Новых подписчиков." },
+              { term:"LTV",       def:"Lifetime Value — сколько денег приносит один подписчик за всё время. Чек × Месяцы." },
+              { term:"LTV/CAC",   def:"Соотношение ценности к стоимости. > 3 — здоровый бизнес. < 1 — убыток на каждом клиенте." },
+              { term:"Payback",   def:"Срок окупаемости — через сколько месяцев подписки окупается стоимость привлечения." },
+              { term:"Маржа",     def:"(LTV − CAC) / LTV × 100%. Какой % от выручки остаётся прибылью." },
+            ]}/>
+            {[
+              { label:"💸 Расходы на трафик ($)",   val:unitSpend,  set:setUnitSpend,  ph:"1000", info:INFO.unit.cac },
+              { label:"🔔 Новых подписчиков",        val:unitNewSub, set:setUnitNewSub, ph:"50",   info:"Сколько новых подписчиков привлекли за этот бюджет." },
+              { label:"💵 Средний чек ($/мес)",      val:unitAvgChk, set:setUnitAvgChk, ph:"15",   info:INFO.unit.ltv },
+              { label:"📅 Среднее мес. подписки",    val:unitMonths, set:setUnitMonths, ph:"3",    info:"Сколько месяцев в среднем остаётся подписчик." },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                  <label style={{ ...labelS, marginBottom:0 }}>{f.label}</label>
+                  <InfoTip content={f.info} t={t}/>
+                </div>
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={inputS}/>
+              </div>
+            ))}
+          </div>
+
+          {cac !== null ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+                <CalcResult label="CAC" value={`$${cac}`} color="#f59e0b" t={t} info={INFO.unit.cac}/>
+                <CalcResult label="LTV" value={ltv?`$${ltv}`:"—"} color="#0ea5e9" t={t} info={INFO.unit.ltv}/>
+                <CalcResult label="LTV / CAC" value={ltvCac||"—"}
+                  color={ltvCac&&+ltvCac>=3?"#10b981":ltvCac&&+ltvCac>=1?"#f59e0b":"#ef4444"} t={t}
+                  info="Ключевое соотношение. > 3 — отличный результат, > 1 — прибыльно."/>
+                <CalcResult label="Маржа" value={margin?`${margin}%`:"—"}
+                  color={margin&&+margin>=50?"#10b981":margin&&+margin>=20?"#f59e0b":"#ef4444"} size="md" t={t}
+                  info={INFO.unit.margin}/>
+              </div>
+              {payback && (
+                <div style={{ padding:"14px 18px", background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"3px" }}>Срок окупаемости</div>
+                    <div style={{ color:"#a78bfa", fontSize:"20px", fontWeight:800 }}>{payback} мес.</div>
+                  </div>
+                  <div style={{ color:t.textFaint, fontSize:"12px", maxWidth:"200px", lineHeight:"1.5", textAlign:"right" }}>
+                    {payback <= 1 ? "🔥 Отлично — окупается в первый месяц" :
+                     payback <= 3 ? "✅ Хорошо — окупается за квартал" :
+                     payback <= 6 ? "⚠️ Долго — проверь LTV и CAC" :
+                     "❌ Слишком долго — нужна оптимизация"}
+                  </div>
+                </div>
+              )}
+              {ltvCac && (
+                <div style={{ padding:"12px 16px", background:`${+ltvCac>=3?"rgba(16,185,129,0.08)":+ltvCac>=1?"rgba(245,158,11,0.08)":"rgba(239,68,68,0.08)"}`, border:`1px solid ${+ltvCac>=3?"rgba(16,185,129,0.2)":+ltvCac>=1?"rgba(245,158,11,0.2)":"rgba(239,68,68,0.2)"}`, borderRadius:"12px" }}>
+                  <div style={{ color:+ltvCac>=3?"#10b981":+ltvCac>=1?"#f59e0b":"#ef4444", fontSize:"13px", lineHeight:"1.6" }}>
+                    {+ltvCac >= 3 ? `✅ LTV/CAC = ${ltvCac} — бизнес здоровый. Каждый доллар на привлечение приносит $${ltvCac} выручки.` :
+                     +ltvCac >= 1 ? `⚠️ LTV/CAC = ${ltvCac} — есть прибыль, но маловато. Снижай CAC или увеличивай удержание.` :
+                     `❌ LTV/CAC = ${ltvCac} — убыток на каждом подписчике. Нужна срочная оптимизация.`}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"40px", textAlign:"center", color:t.textFaint }}>Заполни поля слева</div>
+          )}
+        </div>
+      )}
+
+      {/* ── TAX ── */}
+      {mode === "tax" && (
+        <div style={{ display:"grid", gridTemplateColumns:"320px 1fr", gap:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <InfoBlock title="Расчёт налогов" t={t} items={[
+              { term:"УСН 6%",     def:"Упрощённая система — 6% от доходов. Популярна для небольших агентств в РФ." },
+              { term:"УСН 15%",    def:"Упрощённая — 15% от прибыли (доходы минус расходы)." },
+              { term:"НДС 20%",    def:"Налог на добавленную стоимость. Актуален при работе с юрлицами." },
+              { term:"НДФЛ 13%",   def:"Налог на доходы физлиц для ИП или самозанятых." },
+              { term:"Чистая приб.",def:"Выручка − Расходы − Налог − Зарплаты = что остаётся владельцу." },
+            ]}/>
+            {[
+              { label:"💰 Выручка ($)",        val:taxRev,      set:setTaxRev,      ph:"50000", info:INFO.tax.revenue },
+              { label:"💸 Расходы ($)",         val:taxExpenses, set:setTaxExpenses, ph:"20000", info:INFO.tax.expenses },
+              { label:"👥 Зарплаты ($)",        val:taxSalaries, set:setTaxSalaries, ph:"10000", info:"Суммарные выплаты сотрудникам за период." },
+              { label:"📊 Налоговая ставка (%)",val:taxRate,     set:setTaxRate,     ph:"6",     info:INFO.tax.taxRate },
+            ].map(f => (
+              <div key={f.label}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"5px" }}>
+                  <label style={{ ...labelS, marginBottom:0 }}>{f.label}</label>
+                  <InfoTip content={f.info} t={t}/>
+                </div>
+                <input type="number" value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={inputS}/>
+              </div>
+            ))}
+
+            {/* Tax rate presets */}
+            <div>
+              <label style={{ ...labelS }}>Быстрые ставки</label>
+              <div style={{ display:"flex", gap:"5px", flexWrap:"wrap" }}>
+                {[{l:"УСН 6%",v:"6"},{l:"УСН 15%",v:"15"},{l:"НДФЛ 13%",v:"13"},{l:"НДС 20%",v:"20"},{l:"30%",v:"30"}].map(p => (
+                  <button key={p.v} onClick={()=>setTaxRate(p.v)}
+                    style={{ padding:"5px 10px", borderRadius:"7px", border:`1px solid ${taxRate===p.v?"#7c3aed":t.border}`, background:taxRate===p.v?"rgba(124,58,237,0.15)":t.bgCardHover, color:taxRate===p.v?"#a78bfa":t.textMuted, fontSize:"11px", fontWeight:600, cursor:"pointer" }}>
+                    {p.l}
+                  </button>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* Transactions table */}
-      <div style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: `1px solid ${t.border}`, display: "flex", justifyContent: "space-between" }}>
-          <span style={{ color: t.text, fontSize: "14px", fontWeight: 600 }}>Все операции</span>
-          <span style={{ color: t.textFaint, fontSize: "12px" }}>{filtered.length} записей</span>
-        </div>
-        <div style={{ maxHeight: "420px", overflowY: "auto" }}>
-          {filtered.length === 0 ? (
-            <div style={{ padding: "40px", textAlign: "center", color: t.textFaint, fontSize: "13px" }}>
-              Нет записей. Добавь первый доход или расход.
+          {taxRev ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+                <CalcResult label="Валовая прибыль" value={grossProfit?fmt(grossProfit):"—"}
+                  color={grossProfit&&+grossProfit>0?"#10b981":"#ef4444"} t={t}
+                  info="Выручка минус операционные расходы (без налогов и зарплат)."/>
+                <CalcResult label={`Налог ${taxRate}%`} value={taxAmount?fmt(taxAmount):"—"} color="#f97316" size="md" t={t}
+                  info={`Налог ${taxRate}% от валовой прибыли.`}/>
+                <CalcResult label="Чистая прибыль" value={netProfit?fmt(netProfit):"—"}
+                  color={netProfit&&+netProfit>0?"#10b981":"#ef4444"} t={t}
+                  info="Что остаётся после всех расходов, зарплат и налогов."/>
+                <CalcResult label="Маржа" value={effectiveMargin?`${effectiveMargin}%`:"—"}
+                  color={effectiveMargin&&+effectiveMargin>=20?"#10b981":effectiveMargin&&+effectiveMargin>=10?"#f59e0b":"#ef4444"} size="md" t={t}
+                  info="Чистая прибыль / Выручка × 100%"/>
+              </div>
+
+              {/* Breakdown bar */}
+              {grossProfit && taxAmount && (
+                <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"18px" }}>
+                  <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"12px" }}>Структура выручки ${(+taxRev).toLocaleString()}</div>
+                  {[
+                    { label:"Расходы",  val:+taxExpenses||0, color:"#ef4444" },
+                    { label:"Зарплаты", val:+taxSalaries||0, color:"#f59e0b" },
+                    { label:"Налог",    val:+taxAmount,       color:"#f97316" },
+                    { label:"Прибыль",  val:+netProfit||0,    color:"#10b981" },
+                  ].filter(s=>s.val>0).map((seg, i) => {
+                    const pct = Math.round((seg.val/+taxRev)*100);
+                    return (
+                      <div key={i} style={{ marginBottom:"8px" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:"3px" }}>
+                          <span style={{ color:t.textMuted, fontSize:"12px" }}>{seg.label}</span>
+                          <span style={{ color:seg.color, fontSize:"12px", fontWeight:600 }}>${seg.val.toLocaleString()} ({pct}%)</span>
+                        </div>
+                        <div style={{ height:"6px", background:t.border, borderRadius:"3px", overflow:"hidden" }}>
+                          <motion.div initial={{ width:0 }} animate={{ width:`${pct}%` }} transition={{ duration:0.5, delay:i*0.1 }}
+                            style={{ height:"100%", background:seg.color, borderRadius:"3px" }}/>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          ) : filtered.map((e, i) => (
-            <div key={e.id}
-              style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 20px", borderBottom: i < filtered.length - 1 ? `1px solid ${t.border}` : "none" }}
-              onMouseEnter={ev => ev.currentTarget.style.background = t.bgCardHover}
-              onMouseLeave={ev => ev.currentTarget.style.background = "transparent"}>
-
-              {/* Type icon */}
-              <div style={{ width: "34px", height: "34px", borderRadius: "10px", background: e.type === "income" ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px", flexShrink: 0 }}>
-                {e.type === "income" ? "📈" : "📉"}
-              </div>
-
-              {/* Info */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ color: t.text, fontSize: "13px", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{e.description}</span>
-                  {e.tag && <span style={{ background: t.bgCardHover, color: t.textMuted, fontSize: "10px", fontWeight: 600, padding: "2px 7px", borderRadius: "20px", flexShrink: 0 }}>#{e.tag}</span>}
-                </div>
-                <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "2px" }}>
-                  {e.date}{e.note ? ` · ${e.note}` : ""}
-                </div>
-              </div>
-
-              {/* Amount */}
-              <div style={{ color: e.type === "income" ? "#10b981" : "#ef4444", fontSize: "15px", fontWeight: 700, flexShrink: 0 }}>
-                {e.type === "income" ? "+" : "-"}${(e.amount || 0).toFixed(2)}
-              </div>
-
-              {/* Actions */}
-              <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                <button onClick={() => startEdit(e)}
-                  style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "4px" }}
-                  onMouseEnter={ev => ev.currentTarget.style.color = "#7c3aed"}
-                  onMouseLeave={ev => ev.currentTarget.style.color = t.textFaint}>
-                  <Edit3 size={13} />
-                </button>
-                <button onClick={() => setConfirmDel(e)}
-                  style={{ background: "none", border: "none", color: t.textFaint, cursor: "pointer", padding: "4px" }}
-                  onMouseEnter={ev => ev.currentTarget.style.color = "#ef4444"}
-                  onMouseLeave={ev => ev.currentTarget.style.color = t.textFaint}>
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          ))}
+          ) : (
+            <div style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"40px", textAlign:"center", color:t.textFaint }}>Заполни поля слева</div>
+          )}
         </div>
-      </div>
-
-      {/* Add/Edit modal */}
-      <AnimatePresence>
-        {showForm && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => { setShowForm(false); setEditEntry(null); }}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-            <motion.div initial={{ scale: 0.93, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.93, opacity: 0 }}
-              onClick={e => e.stopPropagation()}
-              style={{ background: t.bgSecondary || t.bgCard, border: `1px solid ${t.border}`, borderRadius: "20px", padding: "28px", width: "100%", maxWidth: "440px", boxShadow: "0 32px 80px rgba(0,0,0,0.6)" }}>
-
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "22px" }}>
-                <h3 style={{ color: t.text, fontSize: "16px", fontWeight: 700 }}>
-                  {editEntry ? "✏️ Редактировать" : form.type === "income" ? "📈 Новый доход" : "📉 Новый расход"}
-                </h3>
-                <button onClick={() => { setShowForm(false); setEditEntry(null); }} style={{ background: "none", border: "none", color: t.textMuted, cursor: "pointer" }}><X size={18} /></button>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                {/* Type toggle */}
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {[{ v: "income", l: "📈 Доход", c: "#10b981", bc: "rgba(16,185,129,0.2)" }, { v: "expense", l: "📉 Расход", c: "#ef4444", bc: "rgba(239,68,68,0.2)" }].map(opt => (
-                    <button key={opt.v} onClick={() => setForm({ ...form, type: opt.v })}
-                      style={{ flex: 1, padding: "10px", borderRadius: "10px", border: `1px solid ${form.type === opt.v ? opt.bc : t.border}`, background: form.type === opt.v ? opt.bc : t.bgCardHover, color: form.type === opt.v ? opt.c : t.textMuted, fontSize: "14px", fontWeight: form.type === opt.v ? 700 : 400, cursor: "pointer" }}>
-                      {opt.l}
-                    </button>
-                  ))}
-                </div>
-
-                <div>
-                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Дата</label>
-                  <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputS} />
-                </div>
-
-                <div>
-                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Сумма ($) *</label>
-                  <input type="number" step="0.01" placeholder="0.00" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })}
-                    style={{ ...inputS, fontSize: "20px", fontWeight: 700, color: form.type === "income" ? "#10b981" : "#ef4444", borderColor: form.amount ? (form.type === "income" ? "rgba(16,185,129,0.4)" : "rgba(239,68,68,0.4)") : t.border }} />
-                </div>
-
-                <div>
-                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Описание *</label>
-                  <input placeholder="Зарплата команды, реклама, выручка OF..." value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} style={inputS} />
-                </div>
-
-                <div>
-                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Тег (необязательно)</label>
-                  <input placeholder="зарплата, реклама, onlyfans, инструменты..." value={form.tag} onChange={e => setForm({ ...form, tag: e.target.value })}
-                    style={inputS} />
-                  <div style={{ color: t.textFaint, fontSize: "11px", marginTop: "4px" }}>Свободный тег для группировки в аналитике</div>
-                </div>
-
-                <div>
-                  <label style={{ color: t.textMuted, fontSize: "11px", fontWeight: 600, display: "block", marginBottom: "5px", textTransform: "uppercase" }}>Заметка</label>
-                  <textarea placeholder="Дополнительные детали..." value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}
-                    rows={2} style={{ ...inputS, resize: "none" }} />
-                </div>
-
-                <button onClick={save} disabled={saving || !form.amount || !form.description}
-                  style={{ width: "100%", background: (!form.amount || !form.description) ? "rgba(124,58,237,0.3)" : form.type === "income" ? "linear-gradient(135deg, #059669, #10b981)" : "linear-gradient(135deg, #dc2626, #ef4444)", color: "#fff", border: "none", borderRadius: "12px", padding: "13px", fontSize: "15px", fontWeight: 700, cursor: (!form.amount || !form.description) ? "not-allowed" : "pointer" }}>
-                  {saving ? "Сохраняем..." : editEntry ? "Сохранить" : form.type === "income" ? "Добавить доход" : "Добавить расход"}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Delete confirm */}
-      <AnimatePresence>
-        {confirmDel && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={() => setConfirmDel(null)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-            <motion.div initial={{ scale: 0.93 }} animate={{ scale: 1 }} exit={{ scale: 0.93 }}
-              onClick={e => e.stopPropagation()}
-              style={{ background: t.bgSecondary || t.bgCard, border: "1px solid rgba(239,68,68,0.3)", borderRadius: "18px", padding: "24px", maxWidth: "360px", width: "100%", textAlign: "center" }}>
-              <div style={{ fontSize: "32px", marginBottom: "12px" }}>🗑️</div>
-              <h3 style={{ color: t.text, marginBottom: "8px" }}>Удалить запись?</h3>
-              <p style={{ color: t.textMuted, fontSize: "13px", marginBottom: "20px" }}>{confirmDel.description} · ${confirmDel.amount}</p>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={() => del(confirmDel.id)} style={{ flex: 1, background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444", borderRadius: "10px", padding: "11px", fontWeight: 600, cursor: "pointer" }}>Удалить</button>
-                <button onClick={() => setConfirmDel(null)} style={{ flex: 1, background: t.bgCardHover, border: `1px solid ${t.border}`, color: t.textMuted, borderRadius: "10px", padding: "11px", cursor: "pointer" }}>Отмена</button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      )}
     </motion.div>
   );
 }
