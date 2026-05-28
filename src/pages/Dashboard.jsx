@@ -3,9 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import LiveBackground from "../components/LiveBackground";
 import {
   collection, onSnapshot, orderBy, query, limit,
-  setDoc, doc, getDoc
+  setDoc, doc, getDoc, updateDoc, addDoc, where
 } from "firebase/firestore";
-import { useAuth, ROLE_COLORS, ROLES } from "../context/AuthContext";
+import { useAuth, ROLE_COLORS, ROLE_LABELS_DISPLAY, ROLES } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import {
   TrendingUp, TrendingDown, Users, CheckSquare,
@@ -955,6 +955,130 @@ function ConfettiOverlay({ active, items }) {
   return <canvas ref={canvasRef} style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 9000 }} />;
 }
 
+// ─── CHATTER SHIFT WIDGET ─────────────────────────────────────────────────────
+function ChatterShiftWidget({ userId, userName, db, t }) {
+  const [activeShift, setActiveShift] = useState(null);
+  const [elapsed, setElapsed]         = useState(0);
+  const [showConfirm, setShowConfirm] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    return onSnapshot(
+      query(collection(db, "shifts"), where("userId", "==", userId), where("status", "==", "active")),
+      snap => setActiveShift(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null)
+    );
+  }, [db, userId]);
+
+  useEffect(() => {
+    if (activeShift) {
+      timerRef.current = setInterval(() => setElapsed(Date.now() - new Date(activeShift.startTime).getTime()), 1000);
+    } else { setElapsed(0); }
+    return () => clearInterval(timerRef.current);
+  }, [activeShift]);
+
+  const start = async () => {
+    await addDoc(collection(db, "shifts"), {
+      userId, userName,
+      startTime: new Date().toISOString(),
+      endTime: null, endedBy: null, endedByName: null,
+      status: "active",
+      date: new Date().toLocaleDateString("ru-RU"),
+    });
+    setShowConfirm(null);
+  };
+
+  const stop = async () => {
+    if (!activeShift) return;
+    await updateDoc(doc(db, "shifts", activeShift.id), {
+      endTime: new Date().toISOString(),
+      endedBy: userId, endedByName: userName,
+      status: "ended",
+    });
+    setShowConfirm(null);
+  };
+
+  const fmt = (ms) => {
+    const s = Math.floor(ms/1000);
+    const h = Math.floor(s/3600);
+    const m = Math.floor((s%3600)/60);
+    const sc = s%60;
+    if (h > 0) return `${h}ч ${m}м ${sc}с`;
+    return `${m}м ${sc}с`;
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" }}>
+        <span style={{ fontSize:"18px" }}>⏱️</span>
+        <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Рабочая смена</h3>
+      </div>
+
+      {activeShift ? (
+        <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+          <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:"14px", padding:"18px 20px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"8px" }}>
+              <div style={{ width:"10px", height:"10px", borderRadius:"50%", background:"#10b981", boxShadow:"0 0 8px #10b981", animation:"pulse 1.5s infinite" }} />
+              <span style={{ color:"#10b981", fontSize:"14px", fontWeight:700 }}>Смена идёт</span>
+            </div>
+            <div style={{ color:"#34d399", fontSize:"36px", fontWeight:900, fontFamily:"monospace", letterSpacing:"1px", marginBottom:"4px" }}>{fmt(elapsed)}</div>
+            <div style={{ color:"rgba(255,255,255,0.35)", fontSize:"12px" }}>Начало в {new Date(activeShift.startTime).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</div>
+          </div>
+          <button onClick={() => setShowConfirm("stop")}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#ef4444", borderRadius:"12px", padding:"13px", fontSize:"14px", fontWeight:700, cursor:"pointer" }}>
+            🛑 Завершить смену
+          </button>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+          <div style={{ background:t.bgCardHover, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"16px 18px" }}>
+            <div style={{ color:t.textMuted, fontSize:"13px", lineHeight:"1.7" }}>
+              После нажатия кнопки начнётся отсчёт рабочей смены.<br/>
+              Тим-лид увидит что ты в работе. Не забудь завершить смену когда закончишь.
+            </div>
+          </div>
+          <button onClick={() => setShowConfirm("start")}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"10px", background:"linear-gradient(135deg,#10b981,#059669)", color:"#fff", border:"none", borderRadius:"12px", padding:"16px", fontSize:"16px", fontWeight:800, cursor:"pointer", boxShadow:"0 4px 20px rgba(16,185,129,0.35)" }}>
+            ▶ Выйти на смену
+          </button>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {showConfirm && (
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            onClick={() => setShowConfirm(null)}
+            style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center", padding:"20px" }}>
+            <motion.div initial={{ scale:0.9, opacity:0 }} animate={{ scale:1, opacity:1 }} exit={{ scale:0.9, opacity:0 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: t.bgSecondary||t.bgCard, border:`1px solid ${t.border}`, borderRadius:"20px", padding:"28px", maxWidth:"360px", width:"100%", textAlign:"center" }}>
+              <div style={{ fontSize:"40px", marginBottom:"14px" }}>{showConfirm==="start"?"⏱️":"🛑"}</div>
+              <h3 style={{ color:t.text, fontSize:"18px", fontWeight:700, marginBottom:"10px" }}>
+                {showConfirm==="start"?"Начать смену?":"Завершить смену?"}
+              </h3>
+              <p style={{ color:t.textMuted, fontSize:"14px", marginBottom:"22px", lineHeight:"1.6" }}>
+                {showConfirm==="start"
+                  ? "Начнётся отсчёт времени. Тим-лид увидит тебя в списке активных."
+                  : `Смена будет завершена. Длительность: ${fmt(elapsed)}`}
+              </p>
+              <div style={{ display:"flex", gap:"10px" }}>
+                <button onClick={showConfirm==="start"?start:stop}
+                  style={{ flex:1, background:showConfirm==="start"?"linear-gradient(135deg,#10b981,#059669)":"rgba(239,68,68,0.15)", border:showConfirm==="start"?"none":"1px solid rgba(239,68,68,0.3)", color:showConfirm==="start"?"#fff":"#ef4444", borderRadius:"12px", padding:"12px", fontSize:"15px", fontWeight:700, cursor:"pointer" }}>
+                  {showConfirm==="start"?"✅ Начать":"🛑 Завершить"}
+                </button>
+                <button onClick={() => setShowConfirm(null)}
+                  style={{ flex:1, background:t.bgCardHover, border:`1px solid ${t.border}`, color:t.textMuted, borderRadius:"12px", padding:"12px", cursor:"pointer" }}>
+                  Отмена
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}`}</style>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
 const cardV = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 const contV = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
@@ -1063,6 +1187,47 @@ export default function Dashboard() {
     },
   ];
 
+  // Shifts data
+  const [shifts, setShifts] = useState([]);
+  const [elapsedMap, setElapsedMap] = useState({});
+  useEffect(() => {
+    return onSnapshot(query(collection(db, "shifts"), orderBy("startTime", "desc")),
+      snap => setShifts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [db]);
+  const activeShifts = shifts.filter(sh => sh.status === "active");
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const m = {};
+      activeShifts.forEach(sh => { m[sh.id] = Date.now() - new Date(sh.startTime).getTime(); });
+      setElapsedMap(m);
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [activeShifts.length]);
+
+  // Team members for team_lead
+  const myTeamMembers = isTeamLead && myTeamMemberIds
+    ? users.filter(u => myTeamMemberIds.has(u.uid || u.id) && u.uid !== profile?.uid)
+    : [];
+
+  const stopShiftAsLead = async (shift, prof) => {
+    await updateDoc(doc(db, "shifts", shift.id), {
+      endTime: new Date().toISOString(),
+      endedBy: prof?.uid,
+      endedByName: prof?.name || "—",
+      status: "ended",
+    });
+  };
+
+  const formatDuration = (ms) => {
+    if (!ms || ms < 0) return "0м";
+    const s = Math.floor(ms/1000);
+    const h = Math.floor(s/3600);
+    const m = Math.floor((s%3600)/60);
+    const sc = s%60;
+    if (h > 0) return `${h}ч ${m}м`;
+    return `${m}м ${sc}с`;
+  };
+
   return (
     <div style={{ position: "relative" }}>
       <LiveBackground />
@@ -1081,182 +1246,245 @@ export default function Dashboard() {
         </p>
       </motion.div>
 
-      {/* Stat cards */}
-      <motion.div variants={contV} initial="hidden" animate="show"
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px", marginBottom: "24px" }}>
-        {stats.map((s, i) => (
-          <motion.div key={i} variants={cardV}
-            style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "20px", position: "relative", overflow: "hidden" }}>
-            {/* bg circle */}
-            <div style={{ position: "absolute", top: -20, right: -20, width: 80, height: 80, borderRadius: "50%", background: `${s.color}12`, pointerEvents: "none" }} />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                {/* Label + tooltip */}
-                <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "8px" }}>
-                  <span style={{ color: t.textMuted, fontSize: "12px" }}>{s.label}</span>
-                  <Tooltip text={s.tip} />
-                </div>
-                <div style={{ color: t.text, fontSize: "30px", fontWeight: 700, lineHeight: 1, marginBottom: "6px" }}>
-                  {loading ? "—" : s.value}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                  {s.trend === "up"   && <TrendingUp   size={12} style={{ color: "#10b981" }} />}
-                  {s.trend === "down" && <TrendingDown  size={12} style={{ color: "#ef4444" }} />}
-                  <span style={{ color: s.trend === "up" ? "#10b981" : s.trend === "down" ? "#ef4444" : t.textMuted, fontSize: "12px" }}>
-                    {s.sub}
-                  </span>
-                </div>
-              </div>
-              <div style={{ background: `${s.color}18`, borderRadius: "10px", padding: "10px", color: s.color, flexShrink: 0 }}>
-                <s.icon size={20} />
-              </div>
-            </div>
+      {/* ── CHATTER VIEW ─────────────────────────────────────────────────── */}
+      {isChatter && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+          {/* Shift button */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.1 }}
+            style={{ background: t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"24px" }}>
+            <ChatterShiftWidget userId={profile?.uid} userName={profile?.name} db={db} t={t} />
           </motion.div>
-        ))}
-      </motion.div>
 
-      {/* Posts + Tasks row */}
-      <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr", gap: "20px", marginBottom: "20px" }}>
-
-        {/* Today's posts */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}
-          style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Публикации сегодня</h3>
-              <Tooltip text="Последние записи добавленные членами команды за сегодня. Платформа, модель, автор." />
+          {/* My tasks today */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.2 }}
+            style={{ background: t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"14px" }}>
+              <CheckSquare size={16} style={{ color:"#7c3aed" }} />
+              <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мои задачи</h3>
+              <span style={{ background:"rgba(124,58,237,0.12)", color:"#a78bfa", fontSize:"11px", fontWeight:700, padding:"2px 8px", borderRadius:"10px" }}>
+                {tasks.filter(tk => (tk.assigneeId === profile?.uid || tk.createdBy === profile?.uid) && tk.column !== "done").length} открытых
+              </span>
             </div>
-            <Clock size={15} style={{ color: t.textMuted }} />
-          </div>
-          {loading ? (
-            <div style={{ color: t.textMuted, textAlign: "center", padding: "20px", fontSize: "13px" }}>Загрузка...</div>
-          ) : todayEntries.length === 0 ? (
-            <div style={{ color: t.textMuted, textAlign: "center", padding: "20px", fontSize: "13px" }}>Сегодня нет публикаций</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {todayEntries.slice(0, 5).map(e => (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "10px", background: t.bgCardHover }}>
-                  <span style={{ fontSize: "18px" }}>{e.platformIcon || "📌"}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ color: t.text, fontSize: "13px", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {e.platform} · {e.model || "—"}
-                    </div>
-                    <div style={{ color: t.textMuted, fontSize: "11px" }}>{e.adminName || e.admin} · {e.time}</div>
+            {tasks.filter(tk => tk.assigneeId === profile?.uid || tk.createdBy === profile?.uid).length === 0 ? (
+              <div style={{ color:t.textFaint, fontSize:"13px", textAlign:"center", padding:"20px" }}>Нет задач — отличный день! 🎉</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:"6px" }}>
+                {tasks.filter(tk => (tk.assigneeId === profile?.uid || tk.createdBy === profile?.uid) && tk.column !== "done").slice(0,5).map(tk => (
+                  <div key={tk.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"9px 12px", background:t.bgCardHover, borderRadius:"10px" }}>
+                    <div style={{ width:"8px", height:"8px", borderRadius:"50%", background: tk.priority==="urgent"?"#ef4444":tk.priority==="high"?"#f59e0b":"#7c3aed", flexShrink:0 }} />
+                    <span style={{ color:t.text, fontSize:"13px", flex:1 }}>{tk.title}</span>
+                    <span style={{ color:t.textFaint, fontSize:"11px" }}>{tk.column==="todo"?"К выполнению":tk.column==="in_progress"?"В работе":"—"}</span>
                   </div>
-                  {e.traffic > 0 && <div style={{ color: "#10b981", fontSize: "12px", fontWeight: 600 }}>+{e.traffic}</div>}
+                ))}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Mini game */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.3 }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" }}>
+              <Zap size={16} style={{ color:"#7c3aed" }} />
+              <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
+            </div>
+            <DinoGame profile={profile} db={db} user={user} />
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── TEAM LEAD VIEW ────────────────────────────────────────────────── */}
+      {isTeamLead && (
+        <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+
+          {/* My team online status */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.1 }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" }}>
+              <Users size={16} style={{ color:"#10b981" }} />
+              <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Моя команда</h3>
+              <span style={{ background:"rgba(16,185,129,0.12)", color:"#10b981", fontSize:"11px", fontWeight:700, padding:"2px 8px", borderRadius:"10px" }}>
+                {myTeamMembers.length} чел.
+              </span>
+            </div>
+            {myTeamMembers.length === 0 ? (
+              <div style={{ color:t.textFaint, fontSize:"13px", textAlign:"center", padding:"20px" }}>Нет участников команды</div>
+            ) : (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:"10px" }}>
+                {myTeamMembers.map(u => {
+                  const rc = ROLE_COLORS[u.role] || "#64748b";
+                  const activeShift = activeShifts.find(sh => sh.userId === (u.uid||u.id));
+                  const elapsed = activeShift ? Date.now() - new Date(activeShift.startTime).getTime() : 0;
+                  return (
+                    <div key={u.id} style={{ padding:"12px 14px", background:t.bgCardHover, borderRadius:"12px", border:`1px solid ${activeShift?"rgba(16,185,129,0.3)":t.border}` }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"6px" }}>
+                        <div style={{ width:"32px", height:"32px", borderRadius:"9px", background:`linear-gradient(135deg,${rc},${rc}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:u.avatarEmoji?"15px":"12px", fontWeight:700, color:"#fff", flexShrink:0 }}>
+                          {u.avatarEmoji||(u.name||"?")[0].toUpperCase()}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ color:t.text, fontSize:"13px", fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.name}</div>
+                          <div style={{ color:t.textFaint, fontSize:"10px" }}>{ROLE_LABELS_DISPLAY[u.role]||u.role}</div>
+                        </div>
+                        {activeShift && <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#10b981", boxShadow:"0 0 6px #10b981", flexShrink:0 }} />}
+                      </div>
+                      {activeShift ? (
+                        <div style={{ color:"#34d399", fontSize:"11px", fontWeight:700, fontFamily:"monospace" }}>
+                          ⏱ {formatDuration(elapsed)}
+                        </div>
+                      ) : (
+                        <div style={{ color:t.textFaint, fontSize:"11px" }}>Не в смене</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </motion.div>
+
+          {/* Active shifts with stop button */}
+          {activeShifts.filter(sh => myTeamMemberIds?.has(sh.userId)).length > 0 && (
+            <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.2 }}
+              style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"14px" }}>
+                <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#10b981", animation:"pulse 1.5s infinite" }} />
+                <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Сейчас в смене</h3>
+              </div>
+              {activeShifts.filter(sh => myTeamMemberIds?.has(sh.userId)).map(sh => (
+                <div key={sh.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 14px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"12px", marginBottom:"6px" }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ color:t.text, fontSize:"13px", fontWeight:600 }}>{sh.userName}</div>
+                    <div style={{ color:t.textMuted, fontSize:"11px" }}>С {new Date(sh.startTime).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})} · {formatDuration(Date.now()-new Date(sh.startTime).getTime())}</div>
+                  </div>
+                  <button onClick={() => stopShiftAsLead(sh, profile)}
+                    style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", color:"#ef4444", borderRadius:"8px", padding:"5px 10px", fontSize:"12px", fontWeight:600, cursor:"pointer" }}>
+                    Стоп
+                  </button>
                 </div>
               ))}
-            </div>
+            </motion.div>
           )}
-        </motion.div>
 
-        {/* Tasks (admin only) */}
-        {isAdmin && (
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}
-            style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Открытые задачи</h3>
-                <Tooltip text="Задачи ещё не завершённые. Видно только владельцам и администраторам." />
-              </div>
-              <div style={{ display: "flex", gap: "6px" }}>
-                {urgentTasks.length > 0 && (
-                  <span style={{ background: "rgba(239,68,68,0.12)", color: "#f87171", fontSize: "11px", fontWeight: 700, padding: "2px 8px", borderRadius: "10px" }}>
-                    🚨 {urgentTasks.length}
-                  </span>
-                )}
-                <span style={{ background: t.bgCardHover, color: t.textMuted, fontSize: "11px", fontWeight: 600, padding: "2px 8px", borderRadius: "10px" }}>
-                  {openTasks.length} всего
-                </span>
-              </div>
+          {/* Stats */}
+          <motion.div variants={contV} initial="hidden" animate="show"
+            style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))", gap:"12px" }}>
+            {stats.map((s,i) => (
+              <motion.div key={i} variants={cardV}
+                style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"14px", padding:"16px" }}>
+                <div style={{ color:t.textMuted, fontSize:"12px", marginBottom:"6px" }}>{s.label}</div>
+                <div style={{ color:t.text, fontSize:"24px", fontWeight:700 }}>{s.value}</div>
+                <div style={{ color:t.textFaint, fontSize:"11px", marginTop:"4px" }}>{s.sub}</div>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.4 }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" }}>
+              <Zap size={16} style={{ color:"#7c3aed" }} />
+              <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
             </div>
-            {openTasks.length === 0 ? (
-              <div style={{ color: t.textMuted, textAlign: "center", padding: "20px", fontSize: "13px" }}>🎉 Все задачи выполнены!</div>
+            <DinoGame profile={profile} db={db} user={user} />
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── ADMIN / OWNER VIEW ───────────────────────────────────────────── */}
+      {!isChatter && !isTeamLead && (
+        <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+
+          {/* Stat cards */}
+          <motion.div variants={contV} initial="hidden" animate="show"
+            style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(200px,1fr))", gap:"16px" }}>
+            {stats.map((s,i) => (
+              <motion.div key={i} variants={cardV}
+                style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"16px", padding:"20px", position:"relative", overflow:"hidden" }}>
+                <div style={{ position:"absolute", top:-20, right:-20, width:80, height:80, borderRadius:"50%", background:`${s.color}12`, pointerEvents:"none" }} />
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:"5px", marginBottom:"8px" }}>
+                      <span style={{ color:t.textMuted, fontSize:"12px" }}>{s.label}</span>
+                      <Tooltip text={s.tip} />
+                    </div>
+                    <div style={{ color:t.text, fontSize:"30px", fontWeight:700, lineHeight:1, marginBottom:"6px" }}>
+                      {loading?"—":s.value}
+                    </div>
+                    <div style={{ color:s.trend==="up"?"#10b981":s.trend==="down"?"#ef4444":t.textMuted, fontSize:"12px" }}>
+                      {s.sub}
+                    </div>
+                  </div>
+                  <div style={{ width:"36px", height:"36px", borderRadius:"10px", background:`${s.color}18`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <s.icon size={18} style={{ color:s.color }} />
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          {/* Active shifts all teams */}
+          {activeShifts.length > 0 && (
+            <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.3 }}
+              style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"14px" }}>
+                <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#10b981", animation:"pulse 1.5s infinite" }} />
+                <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Сейчас в смене</h3>
+                <span style={{ background:"rgba(16,185,129,0.12)", color:"#10b981", fontSize:"11px", fontWeight:700, padding:"2px 8px", borderRadius:"10px" }}>{activeShifts.length}</span>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))", gap:"8px" }}>
+                {activeShifts.map(sh => (
+                  <div key={sh.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"10px 14px", background:"rgba(16,185,129,0.06)", border:"1px solid rgba(16,185,129,0.15)", borderRadius:"12px" }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ color:t.text, fontSize:"13px", fontWeight:600 }}>{sh.userName}</div>
+                      <div style={{ color:t.textMuted, fontSize:"11px" }}>С {new Date(sh.startTime).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"})}</div>
+                    </div>
+                    <div style={{ color:"#34d399", fontSize:"12px", fontWeight:700, fontFamily:"monospace" }}>
+                      {formatDuration(Date.now()-new Date(sh.startTime).getTime())}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Models today */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.4 }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600, marginBottom:"16px" }}>Модели сегодня</h3>
+            {scopedModels.filter(m=>m.status!=="inactive").length===0 ? (
+              <div style={{ color:t.textFaint, fontSize:"13px", textAlign:"center", padding:"20px" }}>Нет активных моделей</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {openTasks.slice(0, 5).map(task => {
-                  const prIcons = { low: "🔵", medium: "🟡", high: "🔴", urgent: "🚨" };
-                  const colLabels = { todo: "📋", inprogress: "⚡", review: "👀" };
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))", gap:"10px" }}>
+                {scopedModels.filter(m=>m.status!=="inactive").map(m => {
+                  const posts = scopedEntries.filter(e=>e.modelId===m.id&&e.date===todayStr).length;
+                  const color = m.color||"#7c3aed";
                   return (
-                    <div key={task.id} style={{ display: "flex", alignItems: "center", gap: "10px", padding: "9px 12px", borderRadius: "10px", background: t.bgCardHover }}>
-                      <span style={{ fontSize: "14px" }}>{prIcons[task.priority] || "🟡"}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: t.text, fontSize: "13px", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{task.title}</div>
-                        <div style={{ color: t.textMuted, fontSize: "11px" }}>{colLabels[task.column]} {task.assigneeName || "Не назначен"}</div>
+                    <div key={m.id} style={{ display:"flex", alignItems:"center", gap:"10px", padding:"12px 14px", background:t.bgCardHover, borderRadius:"12px", border:`1px solid ${color}22` }}>
+                      <div style={{ width:"34px", height:"34px", borderRadius:"9px", background:`linear-gradient(135deg,${color},${color}88)`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"15px", flexShrink:0 }}>
+                        {m.emoji||m.name[0]}
+                      </div>
+                      <div>
+                        <div style={{ color:t.text, fontSize:"13px", fontWeight:600 }}>{m.name}</div>
+                        <div style={{ color:posts>0?"#10b981":t.textFaint, fontSize:"11px" }}>
+                          {posts>0?`✅ ${posts} постов`:"Нет постов сегодня"}
+                        </div>
                       </div>
                     </div>
                   );
                 })}
-                {openTasks.length > 5 && (
-                  <div style={{ color: t.textFaint, fontSize: "12px", textAlign: "center" }}>+ ещё {openTasks.length - 5}</div>
-                )}
               </div>
             )}
           </motion.div>
-        )}
-      </div>
 
-      {/* Models */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}
-        style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px", marginBottom: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Модели</h3>
-            <Tooltip text="Все модели агентства. Зелёная метка — подтверждённые публикации сегодня." />
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            <span style={{ background: "rgba(16,185,129,0.12)", color: "#10b981", fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "10px" }}>
-              ✅ {activeModels.length} активных
-            </span>
-            {inactiveModels.length > 0 && (
-              <span style={{ background: t.bgCardHover, color: t.textMuted, fontSize: "12px", fontWeight: 600, padding: "3px 10px", borderRadius: "10px" }}>
-                ⏸ {inactiveModels.length}
-              </span>
-            )}
-          </div>
+          {/* Mini game */}
+          <motion.div initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }} transition={{ delay:0.5 }}
+            style={{ background:t.bgCard, border:`1px solid ${t.border}`, borderRadius:"18px", padding:"22px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"16px" }}>
+              <Zap size={18} style={{ color:"#7c3aed" }} />
+              <h3 style={{ color:t.text, fontSize:"15px", fontWeight:600 }}>Мини-игра</h3>
+            </div>
+            <DinoGame profile={profile} db={db} user={user} />
+          </motion.div>
         </div>
-        {models.length === 0 ? (
-          <div style={{ color: t.textMuted, fontSize: "13px" }}>Нет моделей</div>
-        ) : (
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            {models.map(m => {
-              const color = m.color || "#7c3aed";
-              const isActive = m.status !== "inactive";
-              const posts = grid.filter(g => g.modelId === m.id && g.date === todayStr && g.status === "posted").length;
-              return (
-                <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 14px", background: t.bgCardHover, borderRadius: "10px", border: `1px solid ${isActive ? color + "30" : t.border}`, opacity: isActive ? 1 : 0.5 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: "8px", background: `linear-gradient(135deg, ${color}, ${color}77)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}>
-                    {m.emoji || m.name[0].toUpperCase()}
-                  </div>
-                  <div>
-                    <div style={{ color: t.text, fontSize: "13px", fontWeight: 600 }}>{m.name}</div>
-                    <div style={{ color: posts > 0 ? "#10b981" : t.textFaint, fontSize: "11px" }}>
-                      {posts > 0 ? `✅ ${posts} постов` : "Нет постов сегодня"}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </motion.div>
-
-      {/* Mini-game */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}
-        style={{ background: t.bgCard, border: `1px solid ${t.border}`, borderRadius: "16px", padding: "22px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Zap size={18} style={{ color: "#7c3aed" }} />
-            <h3 style={{ color: t.text, fontSize: "15px", fontWeight: 600 }}>Мини-игра</h3>
-            <span style={{ color: t.textFaint, fontSize: "12px" }}>для мотивации 😄</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Tooltip text="Прыгай через препятствия! Рекорды сохраняются и видны всей команде в топе справа." />
-            <Trophy size={16} style={{ color: "#f59e0b" }} />
-          </div>
-        </div>
-        <DinoGame profile={profile} db={db} user={user} />
-      </motion.div>
+      )}
 
     </div>
   );
