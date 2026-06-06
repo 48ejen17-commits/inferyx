@@ -597,9 +597,9 @@ function InfoTip({ content, t }) {
       <AnimatePresence>
         {show && (
           <motion.div initial={{ opacity:0, y:4, scale:0.95 }} animate={{ opacity:1, y:0, scale:1 }} exit={{ opacity:0, scale:0.95 }}
-            style={{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)", background:"linear-gradient(135deg,#1e1b4b,#2d1b4e)", border:"1px solid rgba(124,58,237,0.3)", borderRadius:"12px", padding:"10px 14px", width:"240px", zIndex:999, boxShadow:"0 8px 24px rgba(0,0,0,0.4)", pointerEvents:"none" }}>
-            <div style={{ color:"#e2e8f0", fontSize:"12px", lineHeight:"1.6" }}>{content}</div>
-            <div style={{ position:"absolute", bottom:"-5px", left:"50%", transform:"translateX(-50%)", width:"8px", height:"8px", background:"#2d1b4e", border:"1px solid rgba(124,58,237,0.3)", borderBottom:"none", borderRight:"none", transform:"translateX(-50%) rotate(225deg)" }}/>
+            style={{ position:"absolute", bottom:"calc(100% + 8px)", left:"50%", transform:"translateX(-50%)", background:t.bgSecondary||t.bgCard, border:"1px solid rgba(124,58,237,0.3)", borderRadius:"12px", padding:"10px 14px", width:"240px", zIndex:999, boxShadow:"0 8px 24px rgba(0,0,0,0.3)", pointerEvents:"none" }}>
+            <div style={{ color:t.text, fontSize:"12px", lineHeight:"1.6" }}>{content}</div>
+            <div style={{ position:"absolute", bottom:"-5px", left:"50%", width:"8px", height:"8px", background:t.bgSecondary||t.bgCard, border:"1px solid rgba(124,58,237,0.3)", borderBottom:"none", borderRight:"none", transform:"translateX(-50%) rotate(225deg)" }}/>
           </motion.div>
         )}
       </AnimatePresence>
@@ -668,9 +668,9 @@ function InfoBlock({ title, items, t }) {
           <motion.div initial={{ height:0 }} animate={{ height:"auto" }} exit={{ height:0 }} style={{ overflow:"hidden" }}>
             <div style={{ padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:"8px" }}>
               {items.map((item, i) => (
-                <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:"10px", padding:"8px 10px", background:"rgba(255,255,255,0.03)", borderRadius:"8px" }}>
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"110px 1fr", gap:"10px", padding:"8px 10px", background:t.bgCardHover, borderRadius:"8px" }}>
                   <span style={{ color:"#a78bfa", fontSize:"12px", fontWeight:700 }}>{item.term}</span>
-                  <span style={{ color:"rgba(255,255,255,0.55)", fontSize:"12px", lineHeight:"1.5" }}>{item.def}</span>
+                  <span style={{ color:t.textMuted, fontSize:"12px", lineHeight:"1.5" }}>{item.def}</span>
                 </div>
               ))}
             </div>
@@ -683,9 +683,9 @@ function InfoBlock({ title, items, t }) {
 
 function CalcResult({ label, value, color = "#10b981", size = "lg", info, t }) {
   return (
-    <div style={{ background:"rgba(255,255,255,0.03)", border:`1px solid rgba(255,255,255,0.07)`, borderRadius:"12px", padding:"14px 16px" }}>
+    <div style={{ background:t.bgCardHover, border:`1px solid ${t.border}`, borderRadius:"12px", padding:"14px 16px" }}>
       <div style={{ display:"flex", alignItems:"center", gap:"6px", marginBottom:"6px" }}>
-        <span style={{ color:"rgba(255,255,255,0.4)", fontSize:"12px" }}>{label}</span>
+        <span style={{ color:t.textMuted, fontSize:"12px" }}>{label}</span>
         {info && <InfoTip content={info} t={t} />}
       </div>
       <div style={{ color, fontSize: size === "lg" ? "26px" : "20px", fontWeight:800 }}>{value}</div>
